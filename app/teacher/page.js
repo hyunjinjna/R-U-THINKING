@@ -28,6 +28,17 @@ export default function TeacherHome() {
           <div className="card-arrow">→</div>
         </Link>
 
+        <Link href="/teacher/leveltest" className="card">
+          <div className="card-icon" style={{ background: 'var(--pink)' }}>
+            📋
+          </div>
+          <div>
+            <div className="card-title">레벨테스트 결과함</div>
+            <div className="card-desc">제출된 진단 리포트 확인 후 카톡 발송</div>
+          </div>
+          <div className="card-arrow">→</div>
+        </Link>
+
         <Link href="/teacher/upload" className="card">
           <div className="card-icon" style={{ background: 'var(--purple)' }}>
             📤
