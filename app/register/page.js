@@ -35,6 +35,7 @@ export default function RegisterPage() {
   }, []);
 
   const waitlistForm = process.env.NEXT_PUBLIC_WAITLIST_FORM_LINK || '';
+  const enrollForm = process.env.NEXT_PUBLIC_ENROLL_FORM_LINK || '';
 
   if (loading) {
     return <main className="container"><div className="empty">불러오는 중...</div></main>;
@@ -133,9 +134,9 @@ export default function RegisterPage() {
                       )}
                     </div>
                   </div>
-                  {waitlistForm && (
+                  {(open ? enrollForm : waitlistForm) && (
                     <a
-                      href={waitlistForm}
+                      href={open ? enrollForm : waitlistForm}
                       target="_blank"
                       rel="noopener noreferrer"
                       style={{
