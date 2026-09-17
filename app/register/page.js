@@ -81,6 +81,50 @@ export default function RegisterPage() {
 
   // ===== 장바구니 화면 =====
   if (step === 'cart') {
+    const openItems = cart.filter((c) => c['상태'] === '등록가능');
+    const waitItems = cart.filter((c) => c['상태'] !== '등록가능');
+
+    // ===== 구글폼 사전 채우기 =====
+    // 등록폼: 과목 / 레벨 / (요일+시간 합쳐서) 각각 별도 필드
+    const ENROLL_FIELDS = {
+      과목: 'entry.264728761',
+      레벨: 'entry.893298491',
+      요일시간: 'entry.111945916',
+    };
+
+    // 대기폼: 레벨 / 요일 / 시간 각각 별도 필드
+    const WAITLIST_FIELDS = {
+      레벨: 'entry.743784151',
+      요일: 'entry.1937195432',
+      시간: 'entry.1294957404',
+    };
+
+    const buildUrl = (baseUrl, params) => {
+      if (!baseUrl) return null;
+      const sep = baseUrl.includes('?') ? '&' : '?';
+      const query = Object.entries(params)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+        .join('&');
+      return `${baseUrl}${sep}usp=pp_url&${query}`;
+    };
+
+    const makeEnrollLink = (items) =>
+      buildUrl(enrollForm, {
+        [ENROLL_FIELDS.과목]: items.map((i) => i['대분류'] || '').join('\n'),
+        [ENROLL_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join('\n'),
+        [ENROLL_FIELDS.요일시간]: items
+          .map((i) => `${i['수업요일'] || ''} ${i['수업시간'] || ''}`.trim())
+          .join('\n'),
+      });
+
+    const makeWaitlistLink = (items) =>
+      buildUrl(waitlistForm, {
+        [WAITLIST_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join('\n'),
+        [WAITLIST_FIELDS.요일]: items.map((i) => i['수업요일'] || '').join('\n'),
+        [WAITLIST_FIELDS.시간]: items.map((i) => i['수업시간'] || '').join('\n'),
+      });
+
     return (
       <main className="container">
         <button className="back-link" onClick={() => setStep('category')}>← 계속 담기</button>
@@ -123,48 +167,79 @@ export default function RegisterPage() {
           </div>
         )}
 
-        {cart.length === 0 ? (
-          <div className="empty">아직 담은 수업이 없어요.</div>
-        ) : (
-          <div className="card-list">
-            {cart.map((c, i) => {
-              const open = c['상태'] === '등록가능';
-              return (
-                <div key={i} className="card" style={{ cursor: 'default' }}>
-                  <div className="card-icon" style={{ background: open ? 'var(--teal)' : 'var(--light)', fontSize: 13 }}>
-                    {open ? '가능' : '마감'}
-                  </div>
+        {cart.length === 0 && <div className="empty">아직 담은 수업이 없어요.</div>}
+
+        {/* 등록 가능한 수업 */}
+        {openItems.length > 0 && (
+          <>
+            <div className="section-label" style={{ color: 'var(--teal)', fontSize: 14 }}>
+              지금 등록 가능 ({openItems.length}개)
+            </div>
+            <div className="card-list">
+              {openItems.map((c, i) => (
+                <div key={i} className="card" style={{ cursor: 'default', borderColor: 'var(--teal)' }}>
+                  <div className="card-icon" style={{ background: 'var(--teal)', fontSize: 13 }}>가능</div>
                   <div style={{ flex: 1 }}>
                     <div className="card-title">{c['레벨']}</div>
                     <div className="card-desc">{c['수업요일']} {c['수업시간']}</div>
                   </div>
                   <button
-                    onClick={() => removeFromCart(i)}
-                    style={{
-                      background: 'none', border: 'none', color: 'var(--med)',
-                      fontSize: 20, cursor: 'pointer', padding: '0 6px',
-                    }}
+                    onClick={() => removeFromCart(cart.indexOf(c))}
+                    style={{ background: 'none', border: 'none', color: 'var(--med)', fontSize: 20, cursor: 'pointer', padding: '0 6px' }}
                   >
                     ×
                   </button>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+            {conflicts.length === 0 && enrollForm && (
+              <a href={makeEnrollLink(openItems)} target="_blank" rel="noopener noreferrer">
+                <button className="btn" style={{ marginTop: 12 }}>
+                  {openItems.length}개 수업 등록하기
+                </button>
+              </a>
+            )}
+          </>
+        )}
+
+        {/* 대기 필요한 수업 */}
+        {waitItems.length > 0 && (
+          <>
+            <div className="section-label" style={{ color: 'var(--med)', fontSize: 14 }}>
+              대기 신청 필요 ({waitItems.length}개)
+            </div>
+            <div className="card-list">
+              {waitItems.map((c, i) => (
+                <div key={i} className="card" style={{ cursor: 'default', opacity: 0.85 }}>
+                  <div className="card-icon" style={{ background: 'var(--light)', fontSize: 13 }}>마감</div>
+                  <div style={{ flex: 1 }}>
+                    <div className="card-title">{c['레벨']}</div>
+                    <div className="card-desc">
+                      {c['수업요일']} {c['수업시간']} · 대기 {c['대기인원']}/{c['threshold']}명
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => removeFromCart(cart.indexOf(c))}
+                    style={{ background: 'none', border: 'none', color: 'var(--med)', fontSize: 20, cursor: 'pointer', padding: '0 6px' }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            {conflicts.length === 0 && waitlistForm && (
+              <a href={makeWaitlistLink(waitItems)} target="_blank" rel="noopener noreferrer">
+                <button className="btn btn-outline" style={{ marginTop: 12 }}>
+                  {waitItems.length}개 수업 대기 신청하기
+                </button>
+              </a>
+            )}
+          </>
         )}
 
         {cart.length > 0 && conflicts.length === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
-            {cart.some((c) => c['상태'] === '등록가능') && enrollForm && (
-              <a href={enrollForm} target="_blank" rel="noopener noreferrer">
-                <button className="btn">등록하기</button>
-              </a>
-            )}
-            {cart.some((c) => c['상태'] !== '등록가능') && waitlistForm && (
-              <a href={waitlistForm} target="_blank" rel="noopener noreferrer">
-                <button className="btn btn-outline">마감된 수업 대기 신청</button>
-              </a>
-            )}
+          <div className="notice" style={{ marginTop: 20 }}>
+            신청서에 선택하신 수업 정보가 미리 입력되어 있어요. 이름과 연락처만 적어주시면 됩니다.
           </div>
         )}
       </main>

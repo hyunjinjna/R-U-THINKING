@@ -1,4 +1,5 @@
 import { lexileToLevel, VOCA_LEVEL_MAP, grammarStageToLevel, isValidPhone } from '../../../lib/adaptive';
+import { appendRow, extractSheetId } from '../../../lib/sheetsWrite';
 
 export const dynamic = 'force-dynamic';
 
@@ -164,12 +165,42 @@ ${dataText}
 
     const fullText = `${text}\n\n${sectionText}`;
 
+    // ===== 결과 시트에 자동 저장 =====
+    const now = new Date();
+    const kst = new Date(now.getTime() + (now.getTimezoneOffset() + 540) * 60000);
+    const submittedAt = `${kst.getFullYear()}-${String(kst.getMonth() + 1).padStart(2, '0')}-${String(kst.getDate()).padStart(2, '0')} ${String(kst.getHours()).padStart(2, '0')}:${String(kst.getMinutes()).padStart(2, '0')}`;
+
+    const find = (name) => sections.find((s) => s.영역 === name);
+    const phonicsSec = find('파닉스');
+    const readingSec = find('리딩');
+    const vocaSec = find('단어');
+    const grammarSec = find('문법');
+
+    const row = [
+      phone,
+      submittedAt,
+      phonicsSec ? phonicsSec.추천반 : '',
+      readingSec ? readingSec.추천반 : '',
+      readingSec ? readingSec.구멍.join(',') : '',
+      vocaSec ? vocaSec.추천반 : '',
+      vocaSec ? vocaSec.구멍.join(',') : '',
+      grammarSec ? grammarSec.추천반 : '',
+      grammarSec ? grammarSec.구멍.join(',') : '',
+      '',            // 발송여부 (코치가 직접 입력)
+      fullText,      // 리포트전문
+    ];
+
+    const sheetId = extractSheetId(process.env.NEXT_PUBLIC_LEVELTEST_SHEET_LINK);
+    const saveResult = await appendRow(sheetId, '결과', row);
+
     return Response.json({
       report: text,
       sections,
       fullText,
       phone,
-      submittedAt: new Date().toISOString(),
+      submittedAt,
+      saved: saveResult.ok,
+      saveError: saveResult.ok ? null : saveResult.error,
     });
   } catch (err) {
     return Response.json({ error: '요청 실패: ' + err.message });
