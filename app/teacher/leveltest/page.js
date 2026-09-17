@@ -51,10 +51,10 @@ export default function TeacherLevelTestPage() {
           className="result-box"
           style={{ fontSize: 16, lineHeight: 2 }}
         >
-          {selected['리포트']}
+          {selected['리포트전문']}
         </div>
 
-        <button className="btn btn-outline" style={{ marginTop: 14 }} onClick={() => copy(selected['리포트'])}>
+        <button className="btn btn-outline" style={{ marginTop: 14 }} onClick={() => copy(selected['리포트전문'])}>
           {copied ? '복사됨! 카톡에 붙여넣으세요' : '리포트 복사하기'}
         </button>
 
