@@ -131,6 +131,24 @@ export default function ClassesPage() {
             <span className="info-label">이번 회차 숙제</span>
             <span className="info-value">{selected['숙제범위'] || '-'}</span>
           </div>
+          {selected['시크릿코드'] && (
+            <div className="info-row">
+              <span className="info-label">이번 회차 시크릿 코드</span>
+              <span
+                className="info-value"
+                style={{
+                  background: 'var(--yellow)',
+                  color: 'var(--navy)',
+                  padding: '4px 14px',
+                  borderRadius: 8,
+                  fontSize: 16,
+                  letterSpacing: 1,
+                }}
+              >
+                {selected['시크릿코드']}
+              </span>
+            </div>
+          )}
           {selected['개념설명숙제'] && (
             <div className="info-row">
               <span className="info-label">개념 설명 주제</span>

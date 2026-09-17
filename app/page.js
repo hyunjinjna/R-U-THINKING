@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { daysSinceLastClass, filterHomeworkByDay } from '../lib/week';
 
 const CATEGORY_STYLE = {
   파닉스: { color: 'var(--red)', emoji: '🔤' },
@@ -17,6 +18,7 @@ export default function StudentPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isDemo, setIsDemo] = useState(false);
+  const [homeworkPopup, setHomeworkPopup] = useState(false);
 
   useEffect(() => {
     fetch('/api/classes')
@@ -85,13 +87,19 @@ export default function StudentPage() {
       });
     }
 
+    const dayOffset = daysSinceLastClass(selected);
+    const hw = filterHomeworkByDay(selected['숙제범위'], dayOffset);
+
     if (selected['숙제범위']) {
+      const lockedCount = hw.locked.length;
       items.push({
-        label: '이번 주 숙제',
-        desc: selected['숙제범위'],
+        label: '이번 회차 숙제',
+        desc: lockedCount > 0
+          ? `오늘 할 숙제 보기 (${lockedCount}개는 나중에 열려요)`
+          : '눌러서 크게 보기',
         emoji: '📝',
         color: 'var(--yellow)',
-        text: true,
+        onClick: () => setHomeworkPopup(true),
       });
     }
 
@@ -204,6 +212,42 @@ export default function StudentPage() {
             })}
           </div>
         )}
+
+        {homeworkPopup && (
+          <div className="modal-backdrop" onClick={() => setHomeworkPopup(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close" onClick={() => setHomeworkPopup(false)}>
+                ×
+              </button>
+              <div className="modal-title">이번 회차 숙제</div>
+
+              {hw.visible ? (
+                <div className="modal-body">{hw.visible}</div>
+              ) : (
+                <div className="modal-body" style={{ color: 'var(--med)' }}>
+                  오늘 할 숙제가 아직 열리지 않았어요.
+                </div>
+              )}
+
+              {hw.locked.length > 0 && (
+                <div style={{ marginTop: 22, paddingTop: 18, borderTop: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--med)', marginBottom: 8 }}>
+                    아직 열리지 않은 숙제
+                  </div>
+                  {hw.locked.map((l, i) => (
+                    <div key={i} className="locked-item">
+                      <span>🔒</span>
+                      <span>{l.text}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 13 }}>
+                        수업 {l.opensAt}일 뒤 열림
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
     );
   }
@@ -255,7 +299,10 @@ export default function StudentPage() {
   // ===== 1단계: 대분류 =====
   return (
     <main className="container">
-      <span className="badge">R U Thinking?</span>
+      <div className="logo-row">
+        <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
+        <span className="badge">R U Thinking?</span>
+      </div>
       <h1 className="page-title">우리 반 찾기</h1>
       <p className="page-sub">어떤 수업을 듣고 있나요?</p>
 
@@ -323,6 +370,7 @@ function ConceptMode({ classData, onBack }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
+  const recRef = useRef(null);
 
   const isEnglish = String(classData['설명언어'] || '').includes('영어');
 
@@ -334,6 +382,11 @@ function ConceptMode({ classData, onBack }) {
     setLoading(true);
 
     try {
+      if (recRef.current) {
+        try { const r = recRef.current; recRef.current = null; r.stop(); } catch (e) {}
+        setListening(false);
+      }
+
       const res = await fetch('/api/homework', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -357,16 +410,48 @@ function ConceptMode({ classData, onBack }) {
       alert('이 브라우저에서는 음성 인식이 안 돼요. 크롬을 사용해주세요!');
       return;
     }
+    // 이미 듣고 있으면 중지
+    if (recRef.current) {
+      try { recRef.current.stop(); } catch (e) {}
+      recRef.current = null;
+      setListening(false);
+      return;
+    }
+
     const rec = new SR();
     rec.lang = isEnglish ? 'en-US' : 'ko-KR';
-    rec.continuous = false;
-    rec.interimResults = false;
+    rec.continuous = true;      // 말 끊겨도 계속 듣기
+    rec.interimResults = true;  // 말하는 중에도 화면에 표시
+
+    let finalText = '';
+
     rec.onresult = (e) => {
-      setInput(e.results[0][0].transcript);
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += t + ' ';
+        else interim += t;
+      }
+      setInput((finalText + interim).trim());
+    };
+
+    rec.onerror = (e) => {
+      // no-speech 같은 일시 오류는 무시하고 계속
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      recRef.current = null;
       setListening(false);
     };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
+
+    rec.onend = () => {
+      // 사용자가 멈춘 게 아니면 자동으로 다시 시작
+      if (recRef.current) {
+        try { rec.start(); } catch (err) { recRef.current = null; setListening(false); }
+      } else {
+        setListening(false);
+      }
+    };
+
+    recRef.current = rec;
     rec.start();
     setListening(true);
   };
@@ -448,7 +533,7 @@ function ConceptMode({ classData, onBack }) {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && send(input)}
-          placeholder={listening ? '듣고 있어요...' : '말하거나 입력해줘!'}
+          placeholder={listening ? '듣고 있어요 (다 말하면 마이크를 다시 눌러줘)' : '말하거나 입력해줘!'}
           style={{ flex: 1, border: '1px solid var(--border)', borderRadius: 12, padding: '0 14px', fontSize: 14, outline: 'none' }}
         />
         <button
