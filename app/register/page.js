@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { findTimeConflicts } from '../../lib/adaptive';
+import { normalize } from '../../lib/utils';
 
 const CATEGORY_STYLE = {
   파닉스: { color: 'var(--red)', emoji: '🔤' },
@@ -10,7 +12,12 @@ const CATEGORY_STYLE = {
   스피킹: { color: 'var(--pink)', emoji: '🗣️' },
 };
 
-export default function RegisterPage() {
+function RegisterContent() {
+  const searchParams = useSearchParams();
+  const recommendedParam = searchParams.get('levels') || '';
+  const recommendedLevels = recommendedParam
+    ? recommendedParam.split('|').map((s) => s.trim()).filter(Boolean)
+    : [];
   const [step, setStep] = useState('category');
   const [category, setCategory] = useState(null);
   const [level, setLevel] = useState(null);
@@ -29,6 +36,7 @@ export default function RegisterPage() {
         setError(j.error);
         setIsDemo(j.demo);
         setLoading(false);
+        if (recommendedLevels.length > 0) setStep('recommended');
       })
       .catch(() => {
         setError('데이터를 불러오지 못했습니다.');
@@ -79,6 +87,101 @@ export default function RegisterPage() {
   let slotsInLevel = slots.filter((s) => s['대분류'] === category && s['레벨'] === level);
   if (onlyAvailable) slotsInLevel = slotsInLevel.filter((s) => s['상태'] === '등록가능');
 
+  // ===== 추천 레벨 시간표 모아보기 (레벨테스트에서 넘어온 경우) =====
+  if (step === 'recommended' && recommendedLevels.length > 0) {
+    // 추천 레벨명과 일치하는 슬롯들을 레벨별로 묶음
+    const groups = recommendedLevels
+      .map((lv) => {
+        const matched = slots.filter((s) =>
+          normalize(String(lv)).includes(normalize(s['레벨'])) ||
+          normalize(s['레벨']).includes(normalize(lv))
+        );
+        return { level: lv, slots: matched };
+      })
+      .filter((g) => g.slots.length > 0);
+
+    return (
+      <main className="container">
+        <div className="logo-row">
+          <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
+          <span className="badge">추천 수업</span>
+        </div>
+        <h1 className="page-title">추천받으신 수업</h1>
+        <p className="page-sub">원하시는 시간대를 골라 담아주세요</p>
+
+        {groups.length === 0 ? (
+          <div className="empty">
+            추천 레벨에 해당하는 시간표를 찾을 수 없어요.
+            <button className="btn btn-outline" style={{ marginTop: 14 }} onClick={() => setStep('category')}>
+              전체 수업 보기
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 26 }}>
+            {groups.map((g, gi) => (
+              <div key={gi}>
+                <div className="section-label" style={{ fontSize: 15, marginTop: 0 }}>
+                  {g.level}
+                </div>
+                <div className="card-list">
+                  {g.slots.map((s, i) => {
+                    const open = s['상태'] === '등록가능';
+                    const added = inCart(s);
+                    return (
+                      <div
+                        key={i}
+                        className="card"
+                        style={{
+                          cursor: 'default',
+                          borderColor: added ? 'var(--navy)' : open ? 'var(--teal)' : 'var(--border)',
+                          opacity: open ? 1 : 0.8,
+                        }}
+                      >
+                        <div className="card-icon" style={{ background: open ? 'var(--teal)' : 'var(--light)', fontSize: 13 }}>
+                          {open ? '가능' : '마감'}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div className="card-title">{s['수업요일']} {s['수업시간']}</div>
+                          <div className="card-desc">
+                            {open ? '지금 등록할 수 있어요' : `대기 ${s['대기인원']}/${s['threshold']}명`}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => addToCart(s)}
+                          disabled={added}
+                          style={{
+                            fontSize: 13, fontWeight: 700, padding: '8px 14px',
+                            borderRadius: 8, whiteSpace: 'nowrap',
+                            cursor: added ? 'default' : 'pointer',
+                            background: added ? 'var(--border)' : 'var(--navy)',
+                            color: added ? 'var(--med)' : '#fff',
+                            border: 'none',
+                          }}
+                        >
+                          {added ? '담김' : '담기'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {cart.length > 0 && (
+          <button className="btn" style={{ marginTop: 22 }} onClick={() => setStep('cart')}>
+            담은 수업 {cart.length}개 보기
+          </button>
+        )}
+
+        <button className="btn btn-outline" style={{ marginTop: 10 }} onClick={() => setStep('category')}>
+          다른 수업도 둘러보기
+        </button>
+      </main>
+    );
+  }
+
   // ===== 장바구니 화면 =====
   if (step === 'cart') {
     const openItems = cart.filter((c) => c['상태'] === '등록가능');
@@ -111,18 +214,18 @@ export default function RegisterPage() {
 
     const makeEnrollLink = (items) =>
       buildUrl(enrollForm, {
-        [ENROLL_FIELDS.과목]: items.map((i) => i['대분류'] || '').join('\n'),
-        [ENROLL_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join('\n'),
+        [ENROLL_FIELDS.과목]: items.map((i) => i['대분류'] || '').join(', '),
+        [ENROLL_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join(', '),
         [ENROLL_FIELDS.요일시간]: items
           .map((i) => `${i['수업요일'] || ''} ${i['수업시간'] || ''}`.trim())
-          .join('\n'),
+          .join(', '),
       });
 
     const makeWaitlistLink = (items) =>
       buildUrl(waitlistForm, {
-        [WAITLIST_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join('\n'),
-        [WAITLIST_FIELDS.요일]: items.map((i) => i['수업요일'] || '').join('\n'),
-        [WAITLIST_FIELDS.시간]: items.map((i) => i['수업시간'] || '').join('\n'),
+        [WAITLIST_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join(', '),
+        [WAITLIST_FIELDS.요일]: items.map((i) => i['수업요일'] || '').join(', '),
+        [WAITLIST_FIELDS.시간]: items.map((i) => i['수업시간'] || '').join(', '),
       });
 
     return (
@@ -425,5 +528,13 @@ export default function RegisterPage() {
         </button>
       )}
     </main>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<main className="container"><div className="empty">불러오는 중...</div></main>}>
+      <RegisterContent />
+    </Suspense>
   );
 }

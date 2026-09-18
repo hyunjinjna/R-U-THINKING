@@ -296,7 +296,9 @@ export default function LevelTestPage() {
         </div>
         <h1 className="page-title">무료 레벨테스트</h1>
         <p className="page-sub" style={{ fontSize: 15, lineHeight: 1.7 }}>
-          아이의 정확한 영어 실력, 대치동 200명을 가르친 노하우로 진단해드려요.
+          아이의 정확한 영어 실력,
+          <br />
+          대치동 200명을 가르친 노하우로 진단해드려요.
         </p>
 
         <div className="card-list" style={{ marginTop: 24 }}>

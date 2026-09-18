@@ -40,26 +40,54 @@ export default function TeacherLevelTestPage() {
 
   // 상세 보기
   if (selected) {
+    const phone = selected['전화번호'] || '';
+    const full = String(selected['리포트전문'] || '');
+    const summary = full.split('\n\n')[0] || '';
+
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const link = `${origin}/leveltest/result?phone=${encodeURIComponent(phone)}`;
+
+    const kakaoText = `알유띵킹 레벨테스트 결과: ${summary}
+
+자세한 진단 결과는 아래 링크에서 확인하세요.
+${link}`;
+
     return (
       <main className="container">
         <button className="back-link" onClick={() => setSelected(null)}>← 목록으로</button>
 
-        <h1 className="page-title">{selected['전화번호']}</h1>
+        <h1 className="page-title">{phone}</h1>
         <p className="page-sub">{selected['제출일시']}</p>
 
+        <div className="section-label">카톡으로 보낼 내용</div>
         <div
           className="result-box"
-          style={{ fontSize: 16, lineHeight: 2 }}
+          style={{ fontSize: 15, lineHeight: 1.9, whiteSpace: 'pre-wrap' }}
         >
-          {selected['리포트전문']}
+          {kakaoText}
         </div>
 
-        <button className="btn btn-outline" style={{ marginTop: 14 }} onClick={() => copy(selected['리포트전문'])}>
-          {copied ? '복사됨! 카톡에 붙여넣으세요' : '리포트 복사하기'}
+        <button className="btn" style={{ marginTop: 12 }} onClick={() => copy(kakaoText)}>
+          {copied ? '복사됨! 카톡에 붙여넣으세요' : '카톡 발송용 복사하기'}
         </button>
 
+        <a href={link} target="_blank" rel="noopener noreferrer">
+          <button className="btn btn-outline" style={{ marginTop: 10 }}>
+            학부모가 볼 화면 미리보기
+          </button>
+        </a>
+
+        <div className="section-label">전체 리포트 (참고용)</div>
+        <div
+          className="result-box"
+          style={{ fontSize: 15, lineHeight: 1.9, whiteSpace: 'pre-wrap' }}
+        >
+          {full}
+        </div>
+
         <div className="notice" style={{ marginTop: 18 }}>
-          복사한 뒤 <b>{selected['전화번호']}</b> 번호로 카카오톡을 보내주세요.
+          발송하신 뒤에는 결과 시트의 <b>발송여부</b> 칸에 "완료"라고 적어주세요.
+          완료 표시된 건은 이 목록에서 자동으로 사라집니다.
         </div>
       </main>
     );

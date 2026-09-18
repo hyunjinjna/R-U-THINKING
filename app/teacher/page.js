@@ -2,72 +2,72 @@
 
 import Link from 'next/link';
 
-export default function TeacherHome() {
+const MENU = {
+  수업: {
+    title: '수업 관리',
+    emoji: '📚',
+    items: [
+      { href: '/teacher/classes', icon: '🏫', color: 'var(--navy)', title: '반 관리', desc: '오늘 수업, 줌 링크, 진도 확인' },
+      { href: '/teacher/report', icon: '📊', color: 'var(--teal)', title: '주간 리포트 생성', desc: '학생별 주간 리포트 자동 작성' },
+      { href: '/teacher/upload', icon: '📤', color: 'var(--purple)', title: '성적 업로드', desc: '클래스카드 엑셀 올려서 자동 분석' },
+      { href: '/teacher/resources', icon: '📁', color: 'var(--light)', title: '코치 자료', desc: '자주 쓰는 자료 모음' },
+    ],
+  },
+  운영: {
+    title: '운영 관리',
+    emoji: '📈',
+    items: [
+      { href: '/teacher/answer', icon: '💬', color: 'var(--pink)', title: '질문 답변 도우미', desc: '학부모 문의 답변 초안 작성' },
+      { href: '/teacher/leveltest', icon: '📋', color: 'var(--yellow)', title: '레벨테스트 결과함', desc: '진단 리포트 확인 후 카톡 발송' },
+      { href: '/teacher/enrollments', icon: '📝', color: 'var(--navy)', title: '등록 신청 목록', desc: '신규 등록 처리 및 반 배정' },
+      { href: '/teacher/waitlist', icon: '⏳', color: 'var(--red)', title: '대기 신청 목록', desc: '대기자 확인 및 관리' },
+    ],
+  },
+};
+
+export default function TeacherPage() {
   return (
     <main className="container">
-      <span className="badge">R U Thinking?</span>
-      <h1 className="page-title">선생님 페이지</h1>
-      <p className="page-sub">무엇을 하시겠어요?</p>
-
-      <div className="card-list">
-        <Link href="/teacher/classes" className="card">
-          <div className="card-icon" style={{ background: 'var(--navy)' }}>🏫</div>
-          <div>
-            <div className="card-title">반 관리</div>
-            <div className="card-desc">줌 · 영상 · 대시보드 · 진도 확인</div>
-          </div>
-          <div className="card-arrow">→</div>
-        </Link>
-
-        <Link href="/teacher/report" className="card">
-          <div className="card-icon" style={{ background: 'var(--teal)' }}>📊</div>
-          <div>
-            <div className="card-title">주간 리포트 생성</div>
-            <div className="card-desc">대시보드 읽어서 AI가 자동 작성</div>
-          </div>
-          <div className="card-arrow">→</div>
-        </Link>
-
-        <Link href="/teacher/leveltest" className="card">
-          <div className="card-icon" style={{ background: 'var(--pink)' }}>
-            📋
-          </div>
-          <div>
-            <div className="card-title">레벨테스트 결과함</div>
-            <div className="card-desc">제출된 진단 리포트 확인 후 카톡 발송</div>
-          </div>
-          <div className="card-arrow">→</div>
-        </Link>
-
-        <Link href="/teacher/upload" className="card">
-          <div className="card-icon" style={{ background: 'var(--purple)' }}>
-            📤
-          </div>
-          <div>
-            <div className="card-title">성적 업로드</div>
-            <div className="card-desc">클래스카드 엑셀 올려서 자동 분석</div>
-          </div>
-          <div className="card-arrow">→</div>
-        </Link>
-
-        <Link href="/teacher/answer" className="card">
-          <div className="card-icon" style={{ background: 'var(--pink)' }}>💬</div>
-          <div>
-            <div className="card-title">질문 답변 도우미</div>
-            <div className="card-desc">학부모 문의에 AI가 답변 초안 작성</div>
-          </div>
-          <div className="card-arrow">→</div>
-        </Link>
-
-        <Link href="/teacher/resources" className="card">
-          <div className="card-icon" style={{ background: 'var(--yellow)' }}>📁</div>
-          <div>
-            <div className="card-title">코치 자료</div>
-            <div className="card-desc">가이드라인 · 템플릿 · 양식</div>
-          </div>
-          <div className="card-arrow">→</div>
-        </Link>
+      <div className="logo-row">
+        <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
+        <span className="badge">R U Thinking?</span>
       </div>
+      <h1 className="page-title">선생님 페이지</h1>
+
+      {Object.entries(MENU).map(([key, group]) => (
+        <div key={key} style={{ marginBottom: 30 }}>
+          <div
+            style={{
+              fontSize: 15,
+              fontWeight: 800,
+              color: 'var(--navy)',
+              marginBottom: 12,
+              marginTop: 24,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
+            <span style={{ fontSize: 18 }}>{group.emoji}</span>
+            {group.title}
+          </div>
+
+          <div className="card-list">
+            {group.items.map((item) => (
+              <Link key={item.href} href={item.href} className="card">
+                <div className="card-icon" style={{ background: item.color }}>
+                  {item.icon}
+                </div>
+                <div>
+                  <div className="card-title">{item.title}</div>
+                  <div className="card-desc">{item.desc}</div>
+                </div>
+                <div className="card-arrow">→</div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ))}
     </main>
   );
 }
