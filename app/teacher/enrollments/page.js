@@ -18,6 +18,7 @@ export default function EnrollmentsPage() {
   const [notice, setNotice] = useState(null); // { 안내문, 계정, warnings }
   const [copied, setCopied] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [kindTab, setKindTab] = useState('등록'); // 등록 | 대기
   const [doneList, setDoneList] = useState(null); // null=미로드
   const [noticeLoading, setNoticeLoading] = useState(false);
 
@@ -114,6 +115,26 @@ export default function EnrollmentsPage() {
     setSaving(false);
   };
 
+  // 대기 신청 처리완료: 처리여부만 기록 (학생명단 추가·안내문 없음)
+  const handleWaitDone = async () => {
+    if (!selected) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const res = await fetch('/api/enrollments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'waitdone', enrollment: selected }),
+      });
+      const json = await res.json();
+      if (json.error) setMessage(json.error);
+      else {
+        setEnrollments((prev) => prev.filter((e) => e !== selected));
+        setSelected(null);
+      }
+    } catch (err) { setMessage('처리 실패: ' + err.message); }
+    setSaving(false);
+  };
+
   const loadDone = async () => {
     setShowDone(true);
     if (doneList !== null) return;
@@ -181,16 +202,23 @@ export default function EnrollmentsPage() {
 
   // ===== 상세 화면 =====
   if (selected) {
+    const isWait = String(selected['신청 종류'] || '').trim() === '대기';
     return (
       <main className="container">
         <button className="back-link" onClick={() => { setSelected(null); setAssignments({}); setMessage(''); }}>
           ← 목록으로
         </button>
 
-        <h1 className="page-title">{selected['학생 이름']}</h1>
+        <h1 className="page-title">{selected['학생 이름']}{isWait ? ' (대기)' : ''}</h1>
         <p className="page-sub">
           {selected['학생 학년']} · 학부모 {selected['학부모 이름']} ({selected['학부모 연락처']})
         </p>
+
+        {isWait && (
+          <div className="notice" style={{ marginBottom: 14 }}>
+            대기 신청입니다. 이 시간대에 반이 열리면 연락하기로 한 건이에요. 연락(또는 등록 전환)을 마쳤으면 아래 [처리완료]를 눌러주세요 — 대기 카운트에서 빠집니다.
+          </div>
+        )}
 
         <div className="section-label">신청 내역</div>
 
@@ -219,6 +247,7 @@ export default function EnrollmentsPage() {
                   </span>
                 </div>
 
+                {!isWait && (<>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--med)', marginBottom: 8 }}>
                   배정할 반
                 </div>
@@ -241,6 +270,7 @@ export default function EnrollmentsPage() {
                     ))}
                   </select>
                 )}
+                </>)}
               </div>
             );
           })}
@@ -266,8 +296,8 @@ export default function EnrollmentsPage() {
           </div>
         )}
 
-        <button className="btn" style={{ marginTop: 16 }} onClick={handleComplete} disabled={saving}>
-          {saving ? '처리 중...' : '처리완료 (학생명단 추가 + 안내문 생성)'}
+        <button className="btn" style={{ marginTop: 16 }} onClick={isWait ? handleWaitDone : handleComplete} disabled={saving}>
+          {saving ? '처리 중...' : isWait ? '처리완료 (연락 마침 — 대기에서 제외)' : '처리완료 (학생명단 추가 + 안내문 생성)'}
         </button>
 
         {noticeModal}
@@ -291,11 +321,32 @@ export default function EnrollmentsPage() {
 
       {error && <div className="error-box">{error}</div>}
 
-      {!showDone && (enrollments.length === 0 ? (
-        <div className="empty">처리할 등록 신청이 없어요.</div>
+      {!showDone && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          {['등록', '대기'].map((k) => {
+            const count = enrollments.filter((e) => (String(e['신청 종류'] || '').trim() === '대기') === (k === '대기')).length;
+            return (
+              <button key={k} onClick={() => setKindTab(k)}
+                style={{
+                  flex: 1, padding: '10px 0', borderRadius: 10, fontWeight: 800, fontSize: 15, cursor: 'pointer',
+                  border: '2px solid ' + (kindTab === k ? 'var(--navy)' : 'var(--border)'),
+                  background: kindTab === k ? 'var(--navy)' : '#fff',
+                  color: kindTab === k ? '#fff' : 'var(--med)',
+                }}>
+                {k} {count > 0 ? `(${count})` : ''}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!showDone && (() => {
+        const list = enrollments.filter((e) => (String(e['신청 종류'] || '').trim() === '대기') === (kindTab === '대기'));
+        return list.length === 0 ? (
+        <div className="empty">{kindTab === '대기' ? '대기 신청이 없어요.' : '처리할 등록 신청이 없어요.'}</div>
       ) : (
         <div className="card-list">
-          {enrollments.map((e, i) => (
+          {list.map((e, i) => (
             <button key={i} className="card" onClick={() => { setSelected(e); setAssignments({}); }}>
               <div className="card-icon" style={{ background: 'var(--navy)', fontSize: 16 }}>📝</div>
               <div style={{ flex: 1 }}>
@@ -308,7 +359,8 @@ export default function EnrollmentsPage() {
             </button>
           ))}
         </div>
-      ))}
+      );
+      })()}
 
       {showDone && (
         doneList === null ? <div className="empty">처리완료 목록 불러오는 중...</div>

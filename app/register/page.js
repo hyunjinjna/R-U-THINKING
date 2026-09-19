@@ -44,7 +44,7 @@ function RegisterContent() {
       });
   }, []);
 
-  const waitlistForm = process.env.NEXT_PUBLIC_WAITLIST_FORM_LINK || '';
+
   const enrollForm = process.env.NEXT_PUBLIC_ENROLL_FORM_LINK || '';
 
   const inCart = (s) =>
@@ -190,16 +190,10 @@ function RegisterContent() {
     // ===== 구글폼 사전 채우기 =====
     // 등록폼: 과목 / 레벨 / (요일+시간 합쳐서) 각각 별도 필드
     const ENROLL_FIELDS = {
+      종류: 'entry.716998210', // 신청 종류 (등록/대기) — 2026-09-19 폼에 추가됨
       과목: 'entry.264728761',
       레벨: 'entry.893298491',
       요일시간: 'entry.111945916',
-    };
-
-    // 대기폼: 레벨 / 요일 / 시간 각각 별도 필드
-    const WAITLIST_FIELDS = {
-      레벨: 'entry.743784151',
-      요일: 'entry.1937195432',
-      시간: 'entry.1294957404',
     };
 
     const buildUrl = (baseUrl, params) => {
@@ -214,6 +208,7 @@ function RegisterContent() {
 
     const makeEnrollLink = (items) =>
       buildUrl(enrollForm, {
+        [ENROLL_FIELDS.종류]: '등록',
         [ENROLL_FIELDS.과목]: items.map((i) => i['대분류'] || '').join(', '),
         [ENROLL_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join(', '),
         [ENROLL_FIELDS.요일시간]: items
@@ -221,11 +216,15 @@ function RegisterContent() {
           .join(', '),
       });
 
+    // 대기 신청도 같은 등록 폼으로 — 신청 종류만 "대기"로 미리 채움
     const makeWaitlistLink = (items) =>
-      buildUrl(waitlistForm, {
-        [WAITLIST_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join(', '),
-        [WAITLIST_FIELDS.요일]: items.map((i) => i['수업요일'] || '').join(', '),
-        [WAITLIST_FIELDS.시간]: items.map((i) => i['수업시간'] || '').join(', '),
+      buildUrl(enrollForm, {
+        [ENROLL_FIELDS.종류]: '대기',
+        [ENROLL_FIELDS.과목]: items.map((i) => i['대분류'] || '').join(', '),
+        [ENROLL_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join(', '),
+        [ENROLL_FIELDS.요일시간]: items
+          .map((i) => `${i['수업요일'] || ''} ${i['수업시간'] || ''}`.trim())
+          .join(', '),
       });
 
     return (
@@ -330,7 +329,7 @@ function RegisterContent() {
                 </div>
               ))}
             </div>
-            {conflicts.length === 0 && waitlistForm && (
+            {conflicts.length === 0 && enrollForm && (
               <a href={makeWaitlistLink(waitItems)} target="_blank" rel="noopener noreferrer">
                 <button className="btn btn-outline" style={{ marginTop: 12 }}>
                   {waitItems.length}개 수업 대기 신청하기

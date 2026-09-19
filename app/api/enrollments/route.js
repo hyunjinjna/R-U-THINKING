@@ -50,6 +50,16 @@ export async function GET(request) {
   return Response.json({ demo, enrollments: enriched, error });
 }
 
+/** 학생명단 스프레드시트의 실제 탭 이름 찾기 (탭 이름이 "학생명단"이 아닐 수 있음) */
+async function resolveStudentsTab(sheetId) {
+  const candidates = [process.env.STUDENTS_SHEET_TAB, '학생명단', 'Sheet1', '시트1'].filter(Boolean);
+  for (const tab of candidates) {
+    const r = await readTab(sheetId, tab);
+    if (r.ok && !r.missing) return { tab, rows: r.rows };
+  }
+  return { tab: null, rows: [] };
+}
+
 /** 학생명단에서 이름+전화로 기존 클래스카드 계정 찾기 (재원생 추가 등록 시 재사용) */
 function findExistingAccount(studentRows, name, phone) {
   const p = digitsOnly(phone);
@@ -116,8 +126,8 @@ export async function POST(request) {
     const studentsSheetId = extractSheetId(process.env.NEXT_PUBLIC_STUDENTS_SHEET_LINK || '');
     let studentRows = [];
     if (studentsSheetId) {
-      const r = await readTab(studentsSheetId, '학생명단');
-      if (r.ok && !r.missing) studentRows = r.rows;
+      const found = await resolveStudentsTab(studentsSheetId);
+      studentRows = found.rows;
     }
     const p = digitsOnly(전화);
     const mine = studentRows.filter((s) =>
@@ -130,6 +140,14 @@ export async function POST(request) {
     const 계정 = { 아이디: acc.기존아이디 || '', 비번: acc.기존비번 || '' };
     const { 안내문, missing } = await buildNoticeFor(이름, 반이름들, 계정);
     return Response.json({ ok: true, 안내문, 계정, warnings: missing.map((m) => `"${m}" 반을 운영시트에서 못 찾았습니다.`) });
+  }
+
+  // ===== 대기 처리완료 (처리여부만 기록) =====
+  if (body.mode === 'waitdone') {
+    if (!body.enrollment) return Response.json({ error: '신청 정보가 없습니다.' });
+    const done = await markDone(body.enrollment);
+    if (!done.ok) return Response.json({ error: done.error || '처리여부 기록에 실패했습니다.' });
+    return Response.json({ ok: true });
   }
 
   // ===== 처리완료 =====
@@ -148,12 +166,12 @@ export async function POST(request) {
   const results = [];
   const warnings = [];
 
-  // 기존 계정 재사용 여부 확인 후, 없으면 규칙대로 생성
-  let existingRows = [];
-  if (studentsSheetId) {
-    const r = await readTab(studentsSheetId, '학생명단');
-    if (r.ok && !r.missing) existingRows = r.rows;
+  // 학생명단 탭 이름 자동 탐색 (기존 계정 조회 + 추가 저장에 같이 씀)
+  const studentsTab = studentsSheetId ? await resolveStudentsTab(studentsSheetId) : { tab: null, rows: [] };
+  if (studentsSheetId && !studentsTab.tab) {
+    return Response.json({ error: '학생명단 시트에서 탭을 못 찾았습니다. 탭 이름을 "학생명단"으로 바꾸거나, 환경변수 STUDENTS_SHEET_TAB에 실제 탭 이름을 넣어주세요.' });
   }
+  const existingRows = studentsTab.rows;
   const acc = buildClasscardAccount({
     영어이름: enrollment['학생 영어이름'] || '',
     학부모연락처: enrollment['학부모 연락처'] || '',
@@ -172,7 +190,7 @@ export async function POST(request) {
       계정.아이디,
       계정.비번,
     ];
-    const r = await appendRow(studentsSheetId, '학생명단', row);
+    const r = await appendRow(studentsSheetId, studentsTab.tab || '학생명단', row);
     results.push({ 대상: `학생명단 (${a.배정반})`, ok: r.ok, error: r.error });
   }
 

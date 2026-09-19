@@ -902,6 +902,9 @@ function HomeScreen({
       {ongoingClasses.length > 0 && (
         <>
           <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>내 숙제</div>
+          <p style={{ fontSize: 14, color: 'var(--med)', margin: '4px 0 10px' }}>
+            숙제를 다 했으면 동그라미를 눌러 체크해요! ⭕
+          </p>
           <div className="card-list" style={{ gap: 20 }}>
             {ongoingClasses.map((c) => (
               <ClassSection
@@ -1088,6 +1091,18 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
         <div style={{ fontSize: 15, color: 'var(--light)', marginBottom: 6 }}>오늘 확인할 숙제가 없어요.</div>
       )}
 
+      {cls['주말리뷰'] && cls['주말리뷰'].length > 0 && (
+        <>
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--teal)', margin: '2px 0 4px' }}>
+            🎉 주말 리뷰 — 이번 주 배운 것 복습해요!
+          </div>
+          {cls['주말리뷰'].map((item) => {
+            const wk = `${cls['반이름']}|주말${cls['주말리뷰키'] || ''}|${item.title}`;
+            return <HomeworkLine key={wk} item={item} checkKey={wk} />;
+          })}
+        </>
+      )}
+
       {hw.visible.map((item, i) => (
         <HomeworkLine key={keyFor(item.title)} item={item} checkKey={keyFor(item.title)} />
       ))}
@@ -1107,11 +1122,6 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
       )}
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-        {(cls['단어공부링크'] || cls['클래스카드URL']) && (
-          <a href={cls['단어공부링크'] || cls['클래스카드URL']} target="_blank" rel="noopener noreferrer" style={bigChip('var(--soft-teal)', 'var(--teal)')}>
-            📚 단어 공부
-          </a>
-        )}
         {cls['개념설명숙제'] && (
           <button onClick={() => onOpenConcept(cls)} style={bigChip('#f3e8ff', 'var(--purple)')}>
             🗣️ 개념 설명하기
