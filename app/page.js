@@ -135,13 +135,40 @@ export default function StudentPage() {
   const pointsLink = process.env.NEXT_PUBLIC_POINTS_LINK || '';
   const kakaoLink = process.env.NEXT_PUBLIC_KAKAO_CHANNEL_LINK || '';
 
-  // 내 반 목록 (profile.반들 이름 → classes에서 실제 객체 찾기)
-  const myClasses = useMemo(() => {
-    if (!profile || !profile.반들) return [];
-    return profile.반들
-      .map((n) => classes.find((c) => normName(c['반이름']) === normName(n)))
-      .filter(Boolean);
-  }, [profile, classes]);
+  // 내 반 목록 — 학생명단에서 매번 새로 대조 (로그인 후 반이 추가돼도 반영되게)
+  const { myClasses, unmatchedNames } = useMemo(() => {
+    if (!profile || !profile.이름) return { myClasses: [], unmatchedNames: [] };
+    let names = [];
+    if (students.length > 0) {
+      const matches = students.filter((s) =>
+        normName(s['이름']) === normName(profile.이름) && digitsOnly(parentPhoneOf(s)) === profile.전화
+      );
+      names = [...new Set(
+        matches.flatMap((s) => String(s['반이름'] || '').split(/[\n,]/).map((v) => v.trim()).filter(Boolean))
+      )];
+    }
+    // 학생명단을 아직 못 불러왔으면 마지막 저장된 목록으로 (오프라인 대비)
+    if (names.length === 0 && profile.반들) names = profile.반들;
+    const found = [];
+    const unmatched = [];
+    for (const n of names) {
+      const cls = classes.find((c) => normName(c['반이름']) === normName(n));
+      if (cls) found.push(cls);
+      else unmatched.push(n);
+    }
+    return { myClasses: found, unmatchedNames: unmatched };
+  }, [profile, classes, students]);
+
+  // 새로 대조한 반 목록을 기기에도 갱신 저장
+  useEffect(() => {
+    if (!profile || myClasses.length === 0) return;
+    const names = myClasses.map((c) => c['반이름']);
+    if (JSON.stringify(names) !== JSON.stringify(profile.반들 || [])) {
+      const updated = { ...profile, 반들: names };
+      try { localStorage.setItem(PROFILE_KEY, JSON.stringify(updated)); } catch (e) {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myClasses]);
 
   // 밀린 숙제·결석 보강 조회
   useEffect(() => {
@@ -277,6 +304,7 @@ export default function StudentPage() {
       <HomeScreen
         profile={profile}
         myClasses={myClasses}
+        unmatchedNames={unmatchedNames}
         statuses={statuses}
         makeupVideos={makeupVideos}
         now={now}
@@ -286,6 +314,15 @@ export default function StudentPage() {
         onOpenConcept={(cls) => { setConceptClass(cls); setStep('concept'); }}
         onOpenCode={(cls) => { setSelected(cls); setCodeInput(''); setCodeResult(''); setCodePopup(true); }}
         onFindClass={() => setStep('category')}
+        onResetProfile={() => {
+          try { localStorage.removeItem(PROFILE_KEY); } catch (e) {}
+          setProfile(null);
+          setStatuses({});
+          setMakeupVideos({});
+          setOnboardName('');
+          setOnboardPhone('');
+          setStep('onboarding');
+        }}
         codePopup={codePopup}
         setCodePopup={setCodePopup}
         codeInput={codeInput}
@@ -711,8 +748,8 @@ function HomeworkLine({ item }) {
 
 // ===== 홈 화면 컴포넌트 =====
 function HomeScreen({
-  profile, myClasses, statuses, makeupVideos, now, pointsLink, kakaoLink,
-  onEnterZoom, onOpenConcept, onOpenCode, onFindClass,
+  profile, myClasses, unmatchedNames, statuses, makeupVideos, now, pointsLink, kakaoLink,
+  onEnterZoom, onOpenConcept, onOpenCode, onFindClass, onResetProfile,
   codePopup, setCodePopup, codeInput, setCodeInput, codeResult, myName, submitCode,
 }) {
   const ongoingClasses = myClasses.filter((c) => c.status === '진행중');
@@ -737,6 +774,13 @@ function HomeScreen({
       </div>
       <h1 className="page-title">안녕, {profile.이름}! 👋</h1>
       <p className="page-sub">오늘도 화이팅!</p>
+
+      {unmatchedNames && unmatchedNames.length > 0 && (
+        <div className="notice">
+          학생명단에는 있는데 운영시트에서 못 찾은 반이에요: <b>{unmatchedNames.join(', ')}</b>
+          <br />반이름 표기가 운영시트와 같은지 확인해주세요. (선생님용 안내)
+        </div>
+      )}
 
       {/* ===== 오늘의 수업 ===== */}
       <div className="section-label">오늘의 수업</div>
@@ -827,7 +871,10 @@ function HomeScreen({
         </>
       )}
 
-      <div style={{ textAlign: 'right', marginTop: 30 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 30 }}>
+        <button onClick={onResetProfile} style={{ background: 'none', border: 'none', color: 'var(--light)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+          내가 아니에요? 다시 입력하기
+        </button>
         <button onClick={onFindClass} style={{ background: 'none', border: 'none', color: 'var(--light)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
           반 직접 찾기
         </button>
