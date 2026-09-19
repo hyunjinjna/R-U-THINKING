@@ -96,7 +96,7 @@ export async function GET(request) {
 
     const auto = {
       출석: myEntries.length ? att.출석 : '', 입장시각: att.입장시각, 숙제: hw.숙제, 재시결과: hw.재시결과,
-      단어점수: hw.단어점수, 시크릿코드: codeHit ? 'O' : '', 필기인증: notes, 근거: hw.근거,
+      단어점수: hw.단어점수, 시크릿코드: expectedCode ? (codeHit ? 'O' : 'X') : '', 필기인증: notes, 근거: hw.근거,
     };
     const base = { 이름: name, 출석: '', 입장시각: '', 숙제: '', 재시결과: '', 시크릿코드: '', 수업태도: '', 필기인증: '', 특이사항: '', 단어점수: '' };
     // 저장된 값이 있으면 그걸 우선, 없으면 자동 판정

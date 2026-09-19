@@ -185,26 +185,28 @@ export default function ClassesPage() {
             <span className="info-label">진도</span>
             <span className="info-value">{selected['진도'] || '-'}</span>
           </div>
-          <div className="info-row">
+          <div className="info-row" style={{ alignItems: 'flex-start' }}>
             <span className="info-label">이번 회차 숙제</span>
-            <span className="info-value">{selected['숙제범위'] || '-'}</span>
+            <span className="info-value" style={{ textAlign: 'right' }}>
+              {selected['숙제범위']
+                ? String(selected['숙제범위']).split(/\n/).filter(Boolean).map((line, i) => {
+                    const isD1 = /\[D\+\d+\]/i.test(line);
+                    const title = line.replace(/\s*\[D\+\d+\]\s*/i, '').split('|')[0].trim();
+                    return <div key={i}>{title}{isD1 ? ' (다음 날)' : ''}</div>;
+                  })
+                : '-'}
+            </span>
           </div>
+          {selected['테스트안내'] && (
+            <div className="info-row">
+              <span className="info-label">오늘 테스트</span>
+              <span className="info-value">{selected['테스트유닛'] ? `Unit ${selected['테스트유닛']}` : selected['테스트안내']}</span>
+            </div>
+          )}
           {selected['시크릿코드'] && (
             <div className="info-row">
               <span className="info-label">이번 회차 시크릿 코드</span>
-              <span
-                className="info-value"
-                style={{
-                  background: 'var(--yellow)',
-                  color: 'var(--navy)',
-                  padding: '4px 14px',
-                  borderRadius: 8,
-                  fontSize: 16,
-                  letterSpacing: 1,
-                }}
-              >
-                {selected['시크릿코드']}
-              </span>
+              <span className="info-value">{selected['시크릿코드']}</span>
             </div>
           )}
           {selected['개념설명숙제'] && (

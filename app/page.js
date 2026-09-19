@@ -732,21 +732,82 @@ export default function StudentPage() {
   );
 }
 
-// ===== 숙제 한 줄 표시 (링크 있으면 버튼) =====
-function HomeworkLine({ item }) {
+// ===== 숙제 한 줄 표시 =====
+// 제목 앞 이모지(🆕✏️🔁🗣️ 등)는 아이콘 자리에 넣고 제목에서는 뺀다 (아이콘 더블 방지)
+function splitLeadingEmoji(title) {
+  const m = String(title || '').match(/^(\p{Extended_Pictographic}(?:\uFE0F)?)\s*(.*)$/u);
+  if (m) return { emoji: m[1], text: m[2] };
+  return { emoji: '📝', text: String(title || '') };
+}
+
+// 자기 체크 (성취감용) — 기기에만 저장, 코치 판정과 무관
+const SELF_CHECK_KEY = 'ru_self_check';
+function loadSelfChecks() {
+  try { return JSON.parse(localStorage.getItem(SELF_CHECK_KEY) || '{}'); } catch (e) { return {}; }
+}
+function saveSelfChecks(obj) {
+  try { localStorage.setItem(SELF_CHECK_KEY, JSON.stringify(obj)); } catch (e) {}
+}
+
+function HomeworkLine({ item, checkKey }) {
+  const { emoji, text } = splitLeadingEmoji(item.title);
+  const [checked, setChecked] = useState(() => (checkKey ? !!loadSelfChecks()[checkKey] : false));
+
+  const toggle = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!checkKey) return;
+    const all = loadSelfChecks();
+    const next = !all[checkKey];
+    if (next) all[checkKey] = 1; else delete all[checkKey];
+    saveSelfChecks(all);
+    setChecked(next);
+  };
+
+  const titleStyle = {
+    fontSize: 16,
+    textDecoration: checked ? 'line-through' : 'none',
+    color: checked ? 'var(--light)' : undefined,
+  };
+
+  const checkBtn = checkKey ? (
+    <button
+      onClick={toggle}
+      title={checked ? '다시 하기로 표시' : '다 했어요!'}
+      style={{
+        width: 34, height: 34, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
+        border: checked ? 'none' : '2px solid var(--border)',
+        background: checked ? 'var(--teal)' : '#fff',
+        color: '#fff', fontSize: 16, lineHeight: 1,
+      }}
+    >
+      {checked ? '✓' : ''}
+    </button>
+  ) : null;
+
+  const inner = (
+    <>
+      <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>{emoji}</div>
+      <div style={{ flex: 1 }}>
+        <div className="card-title" style={titleStyle}>{text}</div>
+        {checked && <div style={{ fontSize: 12, color: 'var(--teal)', fontWeight: 700 }}>잘했어! 🎉</div>}
+      </div>
+    </>
+  );
+
   if (item.link) {
     return (
       <a href={item.link} target="_blank" rel="noopener noreferrer" className="card">
-        <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>📝</div>
-        <div className="card-title" style={{ fontSize: 16 }}>{item.title}</div>
+        {inner}
+        {checkBtn}
         <div className="card-arrow">→</div>
       </a>
     );
   }
   return (
     <div className="card" style={{ cursor: 'default' }}>
-      <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>📝</div>
-      <div className="card-title" style={{ fontSize: 16 }}>{item.title}</div>
+      {inner}
+      {checkBtn}
     </div>
   );
 }
@@ -968,7 +1029,7 @@ function TodayCard({ cls, info, onEnterZoom }) {
       </div>
     );
   }
-  // live
+  // live (수업 시작 ~ 30분): 줌 입장 + 오늘 테스트 버튼
   return (
     <>
       <button className="card" onClick={() => onEnterZoom(cls)}>
@@ -979,6 +1040,16 @@ function TodayCard({ cls, info, onEnterZoom }) {
         </div>
         <div className="card-arrow">→</div>
       </button>
+      {cls['테스트링크'] && (
+        <a href={cls['테스트링크']} target="_blank" rel="noopener noreferrer" className="card">
+          <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>📝</div>
+          <div>
+            <div className="card-title">오늘 테스트{cls['테스트유닛'] ? `: Unit ${cls['테스트유닛']}` : ''}</div>
+            <div className="card-desc">수업 시작하면 여기서 시험 봐요</div>
+          </div>
+          <div className="card-arrow">→</div>
+        </a>
+      )}
       <ZoomTroubleHint />
     </>
   );
@@ -995,6 +1066,8 @@ function ZoomTroubleHint() {
 function ClassSection({ cls, onOpenConcept, onOpenCode }) {
   const dayOffset = daysSinceLastClass(cls);
   const hw = filterHomeworkByDay(cls['숙제범위'], dayOffset, lastClassDate(cls));
+  const session = cls.sessions || cls['현재회차'] || '';
+  const keyFor = (title) => `${cls['반이름']}|${session}|${title}`;
 
   // 반 섹션 안 큰 버튼 공통 스타일 (폰트 키우기 피드백 반영)
   const bigChip = (bg, color) => ({
@@ -1016,7 +1089,7 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
       )}
 
       {hw.visible.map((item, i) => (
-        <HomeworkLine key={i} item={item} />
+        <HomeworkLine key={keyFor(item.title)} item={item} checkKey={keyFor(item.title)} />
       ))}
 
       {hw.locked.length > 0 && (
@@ -1034,8 +1107,8 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
       )}
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
-        {cls['클래스카드URL'] && (
-          <a href={cls['클래스카드URL']} target="_blank" rel="noopener noreferrer" style={bigChip('var(--soft-teal)', 'var(--teal)')}>
+        {(cls['단어공부링크'] || cls['클래스카드URL']) && (
+          <a href={cls['단어공부링크'] || cls['클래스카드URL']} target="_blank" rel="noopener noreferrer" style={bigChip('var(--soft-teal)', 'var(--teal)')}>
             📚 단어 공부
           </a>
         )}

@@ -1,7 +1,7 @@
 import { fetchSheet } from '../../../lib/sheets';
 import { getCurrentCurriculum } from '../../../lib/week';
 import { extractUnit } from '../../../lib/dashboard';
-import { buildAutoHomework, testInfoFor } from '../../../lib/curriculum';
+import { buildAutoHomework, testInfoFor, findSetLink } from '../../../lib/curriculum';
 import { loadClasscardSets } from '../../../lib/curriculumData';
 import { splitMulti } from '../../../lib/utils';
 import { SHEET_URLS, DEMO_CLASSES, DEMO_CURRICULUM, IS_DEMO } from '../../../lib/config';
@@ -29,7 +29,16 @@ function assemble(c, sets) {
   }
 
   const test = testInfoFor({ category: c['대분류'], textbook, unit, sets });
-  if (test) { out['테스트세트'] = test.세트; out['테스트링크'] = test.링크; out['테스트안내'] = test.안내; }
+  if (test) {
+    out['테스트세트'] = test.세트; out['테스트링크'] = test.링크; out['테스트안내'] = test.안내;
+    out['테스트유닛'] = unit ? unit - 1 : '';
+  }
+
+  // "단어 공부" 버튼용: 세트 탭의 현재 유닛 단어세트 (클래스카드URL 열 은퇴 — 있으면 예비로만)
+  if (textbook && unit) {
+    const wordSet = findSetLink(sets, `${textbook} - Unit ${unit}`);
+    if (wordSet) out['단어공부링크'] = wordSet;
+  }
   return out;
 }
 

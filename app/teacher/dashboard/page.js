@@ -108,14 +108,6 @@ export default function DashboardPage() {
               {data.시크릿코드 ? ` · 시크릿코드 ${data.시크릿코드}` : ''}
             </p>
             {data.숙제유닛 ? <p className="page-sub" style={{ marginTop: -6 }}>확인할 숙제: Unit {data.숙제유닛} (지난 회차)</p> : null}
-            {data.테스트 ? (
-              <p className="page-sub" style={{ marginTop: -6 }}>
-                수업 시작 테스트: {data.테스트.안내}{' '}
-                {data.테스트.링크
-                  ? <a href={data.테스트.링크} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--teal)', fontWeight: 700 }}>[세트 열기]</a>
-                  : <span style={{ color: 'var(--red)' }}>(세트 링크 미등록 — 클래스카드 세트 탭 확인)</span>}
-              </p>
-            ) : null}
             {data.warnings && data.warnings.length > 0 && (
               <div className="notice" style={{ marginBottom: 12 }}>{data.warnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}</div>
             )}

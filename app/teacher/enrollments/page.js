@@ -15,6 +15,11 @@ export default function EnrollmentsPage() {
   const [assignments, setAssignments] = useState({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [notice, setNotice] = useState(null); // { 안내문, 계정, warnings }
+  const [copied, setCopied] = useState(false);
+  const [showDone, setShowDone] = useState(false);
+  const [doneList, setDoneList] = useState(null); // null=미로드
+  const [noticeLoading, setNoticeLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -95,7 +100,11 @@ export default function EnrollmentsPage() {
       if (json.error) {
         setMessage(json.error);
       } else if (json.ok) {
-        setMessage('학생명단에 추가되었습니다. 신청 시트의 "처리여부"에 완료라고 적어주세요.');
+        setMessage('');
+        setNotice({ 안내문: json.안내문, 계정: json.계정, warnings: json.warnings || [] });
+        setCopied(false);
+        // 처리된 건은 대기 목록에서 제거
+        setEnrollments((prev) => prev.filter((e) => e !== selected));
       } else {
         setMessage('일부 처리에 실패했습니다: ' + JSON.stringify(json.results));
       }
@@ -104,6 +113,67 @@ export default function EnrollmentsPage() {
     }
     setSaving(false);
   };
+
+  const loadDone = async () => {
+    setShowDone(true);
+    if (doneList !== null) return;
+    const r = await fetch('/api/enrollments?done=1').then((x) => x.json()).catch(() => ({ enrollments: [] }));
+    setDoneList(r.enrollments || []);
+  };
+
+  const openNoticeFor = async (e) => {
+    setNoticeLoading(true);
+    try {
+      const res = await fetch('/api/enrollments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'notice', 이름: e['학생 이름'], 전화: e['학부모 연락처'] }),
+      });
+      const j = await res.json();
+      if (j.error) { alert(j.error); }
+      else { setNotice({ 안내문: j.안내문, 계정: j.계정, warnings: j.warnings || [] }); setCopied(false); }
+    } catch (err) { alert('안내문 생성 실패: ' + err.message); }
+    setNoticeLoading(false);
+  };
+
+  const copyNotice = () => {
+    if (!notice) return;
+    navigator.clipboard.writeText(notice.안내문).then(() => setCopied(true)).catch(() => {
+      // 클립보드 실패 시 선택이라도 되게
+      alert('복사가 안 되면 안내문을 길게 눌러 직접 복사해주세요.');
+    });
+  };
+
+  const noticeModal = notice && (
+    <div className="modal-backdrop" onClick={() => setNotice(null)}>
+      <div className="modal" onClick={(ev) => ev.stopPropagation()} style={{ maxHeight: '85vh', overflowY: 'auto' }}>
+        <button className="modal-close" onClick={() => setNotice(null)}>✕</button>
+        <div className="modal-title">등록 안내문 (카톡 발송용)</div>
+
+        {notice.계정 && notice.계정.아이디 && (
+          <div className="notice" style={{ marginBottom: 12 }}>
+            클래스카드 계정 {notice.계정.재사용 ? '(기존 계정 재사용)' : '(새로 생성됨 — 클래스카드에서 이 값으로 계정을 만들어주세요)'}
+            <div style={{ marginTop: 6, fontFamily: 'monospace', fontSize: 15 }}>
+              아이디: {notice.계정.아이디} / 비밀번호: {notice.계정.비번}
+            </div>
+          </div>
+        )}
+
+        {notice.warnings.length > 0 && (
+          <div className="error-box" style={{ marginBottom: 12 }}>
+            {notice.warnings.map((w, i) => <div key={i}>⚠️ {w}</div>)}
+          </div>
+        )}
+
+        <button className="btn" onClick={copyNotice} style={{ marginBottom: 12 }}>
+          {copied ? '✓ 복사됨! 카톡에 붙여넣으세요' : '안내문 전체 복사하기'}
+        </button>
+
+        <div className="result-box" style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.8 }}>
+          {notice.안내문}
+        </div>
+      </div>
+    </div>
+  );
 
   if (loading) {
     return <main className="container"><div className="empty">불러오는 중...</div></main>;
@@ -197,8 +267,10 @@ export default function EnrollmentsPage() {
         )}
 
         <button className="btn" style={{ marginTop: 16 }} onClick={handleComplete} disabled={saving}>
-          {saving ? '처리 중...' : '처리완료 (학생명단에 추가)'}
+          {saving ? '처리 중...' : '처리완료 (학생명단 추가 + 안내문 생성)'}
         </button>
+
+        {noticeModal}
       </main>
     );
   }
@@ -219,7 +291,7 @@ export default function EnrollmentsPage() {
 
       {error && <div className="error-box">{error}</div>}
 
-      {enrollments.length === 0 ? (
+      {!showDone && (enrollments.length === 0 ? (
         <div className="empty">처리할 등록 신청이 없어요.</div>
       ) : (
         <div className="card-list">
@@ -236,7 +308,34 @@ export default function EnrollmentsPage() {
             </button>
           ))}
         </div>
+      ))}
+
+      {showDone && (
+        doneList === null ? <div className="empty">처리완료 목록 불러오는 중...</div>
+        : doneList.length === 0 ? <div className="empty">처리완료된 신청이 없어요.</div>
+        : (
+          <div className="card-list">
+            {doneList.map((e, i) => (
+              <div key={i} className="card" style={{ cursor: 'default' }}>
+                <div className="card-icon" style={{ background: 'var(--teal)', fontSize: 16 }}>✓</div>
+                <div style={{ flex: 1 }}>
+                  <div className="card-title">{e['학생 이름']} ({e['학생 학년']})</div>
+                  <div className="card-desc">{String(e['처리여부'] || '')}</div>
+                </div>
+                <button className="btn" style={{ width: 'auto', padding: '8px 14px', fontSize: 13, flexShrink: 0 }} onClick={() => openNoticeFor(e)} disabled={noticeLoading}>
+                  {noticeLoading ? '...' : '안내문 보기'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )
       )}
+
+      <button className="btn btn-outline" style={{ marginTop: 14 }} onClick={() => (showDone ? setShowDone(false) : loadDone())}>
+        {showDone ? '← 처리 대기 목록으로' : '처리완료 목록 보기 (안내문 재발송)'}
+      </button>
+
+      {noticeModal}
     </main>
   );
 }

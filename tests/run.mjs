@@ -9,3 +9,4 @@ for (const f of readdirSync('/tmp/rt/lib')) { const p = '/tmp/rt/lib/' + f; writ
 await import('/tmp/rt/tests/dashboard.test.mjs');
 await import('/tmp/rt/tests/week.test.mjs');
 await import('/tmp/rt/tests/curriculum.test.mjs');
+await import('/tmp/rt/tests/notice.test.mjs');
