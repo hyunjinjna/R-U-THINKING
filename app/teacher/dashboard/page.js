@@ -57,13 +57,14 @@ export default function DashboardPage() {
   const [msg, setMsg] = useState('');
   const [showAll, setShowAll] = useState(false);
   const [showWhy, setShowWhy] = useState(null);
+  const [fromClasses, setFromClasses] = useState(false); // 반 관리에서 ?class=로 들어왔는지 (뒤로가기 목적지)
 
   useEffect(() => {
     fetch('/api/dashboard').then((r) => r.json()).then((j) => {
       setClasses(j.classes || []); setDate(j.date || ''); setLoading(false);
       // 반 관리에서 ?class=반이름 으로 들어오면 그 반을 바로 연다
       const q = new URLSearchParams(window.location.search).get('class');
-      if (q) openClass(q, j.date || '');
+      if (q) { setFromClasses(true); openClass(q, j.date || ''); }
     }).catch(() => setLoading(false));
   }, []);
 
