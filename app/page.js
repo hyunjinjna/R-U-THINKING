@@ -147,8 +147,9 @@ export default function StudentPage() {
         matches.flatMap((s) => String(s['반이름'] || '').split(/[\n,]/).map((v) => v.trim()).filter(Boolean))
       )];
     }
-    // 학생명단을 아직 못 불러왔으면 마지막 저장된 목록으로 (오프라인 대비)
-    if (names.length === 0 && profile.반들) names = profile.반들;
+    // 학생명단을 아직 못 불러온 경우에만 마지막 저장 목록 사용 (오프라인 대비)
+    // — 명단이 로드됐는데 매칭이 없으면(퇴원·번호 변경) 빈 목록이 맞음
+    if (students.length === 0 && names.length === 0 && profile.반들) names = profile.반들;
     const found = [];
     const unmatched = [];
     for (const n of names) {
@@ -170,16 +171,16 @@ export default function StudentPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myClasses]);
 
-  // 밀린 숙제·결석 보강 조회
+  // 밀린 숙제·결석 보강 조회 (반 구성이 바뀌면 다시 조회)
+  const myClassKey = myClasses.map((c) => c['반이름']).join(',');
   useEffect(() => {
-    if (!profile || !profile.이름 || myClasses.length === 0) return;
-    const 반들 = myClasses.map((c) => c['반이름']).join(',');
-    fetch(`/api/student-status?이름=${encodeURIComponent(profile.이름)}&반들=${encodeURIComponent(반들)}`)
+    if (!profile || !profile.이름 || !myClassKey) return;
+    fetch(`/api/student-status?이름=${encodeURIComponent(profile.이름)}&반들=${encodeURIComponent(myClassKey)}`)
       .then((r) => r.json())
       .then((j) => setStatuses(j.statuses || {}))
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile, myClasses.length]);
+  }, [profile, myClassKey]);
 
   // 결석 보강 영상: 최근 기록이 결석이고 3일 이내인 반만 조회
   useEffect(() => {
@@ -244,6 +245,10 @@ export default function StudentPage() {
     const phoneDigits = digitsOnly(onboardPhone);
     if (!name) { setOnboardError('이름을 입력해줘!'); return; }
     if (phoneDigits.length < 8) { setOnboardError('학부모님 전화번호를 정확히 입력해줘!'); return; }
+    if (students.length === 0) {
+      setOnboardError('명단을 불러오는 중이에요. 잠깐 기다렸다가 다시 눌러줘!');
+      return;
+    }
 
     const matches = students.filter((s) =>
       normName(s['이름']) === normName(name) && digitsOnly(parentPhoneOf(s)) === phoneDigits
@@ -782,6 +787,12 @@ function HomeScreen({
         </div>
       )}
 
+      {myClasses.length === 0 && (!unmatchedNames || unmatchedNames.length === 0) && (
+        <div className="notice">
+          명단에서 내 반을 못 찾았어요. 아래 "다시 입력하기"로 이름·전화번호를 확인하거나, 선생님께 문의해줘!
+        </div>
+      )}
+
       {/* ===== 오늘의 수업 ===== */}
       <div className="section-label">오늘의 수업</div>
       {todayCards.length === 0 ? (
@@ -933,13 +944,17 @@ function TodayCard({ cls, info, onEnterZoom }) {
   // type === 'today'
   if (info.phase === 'before') {
     return (
-      <div className="card" style={{ cursor: 'default' }}>
-        <div className="card-icon" style={{ background: 'var(--navy)' }}>🎥</div>
-        <div>
-          <div className="card-title">{cls['반이름']}</div>
-          <div className="card-desc">{cls['수업시간']}에 수업이 있어요</div>
-        </div>
-      </div>
+      <>
+        <button className="card" onClick={() => onEnterZoom(cls)}>
+          <div className="card-icon" style={{ background: 'var(--navy)' }}>🎥</div>
+          <div>
+            <div className="card-title">{cls['반이름']} 수업 입장</div>
+            <div className="card-desc">{cls['수업시간']} 수업 · 미리 들어갈 수 있어요</div>
+          </div>
+          <div className="card-arrow">→</div>
+        </button>
+        <ZoomTroubleHint />
+      </>
     );
   }
   if (info.phase === 'after') {
