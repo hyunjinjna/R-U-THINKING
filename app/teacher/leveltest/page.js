@@ -26,10 +26,24 @@ export default function TeacherLevelTestPage() {
       });
   }, []);
 
+  const [marked, setMarked] = useState('');
+
   const copy = (text) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+    // 복사하면 발송여부 자동 처리 (되돌리기 버튼 제공)
+    if (selected && !isDemo) markSent(selected, '완료');
+  };
+
+  const markSent = async (row, value) => {
+    setMarked('처리 중...');
+    const res = await fetch('/api/leveltest-results', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: row['전화번호'], 제출일시: row['제출일시'], value }),
+    });
+    const j = await res.json();
+    setMarked(j.ok ? (value ? '발송 처리됨 — 목록에서 사라져요' : '발송 처리 취소됨') : '자동 처리 실패: ' + j.error);
   };
 
   const sheetLink = process.env.NEXT_PUBLIC_LEVELTEST_SHEET_LINK || '';
@@ -70,6 +84,14 @@ ${link}`;
         <button className="btn" style={{ marginTop: 12 }} onClick={() => copy(kakaoText)}>
           {copied ? '복사됨! 카톡에 붙여넣으세요' : '카톡 발송용 복사하기'}
         </button>
+        {marked && (
+          <div className="notice" style={{ marginTop: 8, fontSize: 12 }}>
+            {marked}
+            {marked.startsWith('발송 처리됨') && (
+              <button onClick={() => markSent(selected, '')} style={{ marginLeft: 8, background: 'none', border: 0, color: 'var(--navy)', textDecoration: 'underline', cursor: 'pointer' }}>되돌리기</button>
+            )}
+          </div>
+        )}
 
         <a href={link} target="_blank" rel="noopener noreferrer">
           <button className="btn btn-outline" style={{ marginTop: 10 }}>
@@ -86,7 +108,7 @@ ${link}`;
         </div>
 
         <div className="notice" style={{ marginTop: 18 }}>
-          발송하신 뒤에는 결과 시트의 <b>발송여부</b> 칸에 "완료"라고 적어주세요.
+          "카톡 발송용 복사하기"를 누르면 <b>발송여부</b>가 자동으로 처리됩니다. 실수로 눌렀으면 되돌리기.
           완료 표시된 건은 이 목록에서 자동으로 사라집니다.
         </div>
       </main>

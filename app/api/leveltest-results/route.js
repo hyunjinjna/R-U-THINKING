@@ -65,3 +65,23 @@ export async function GET(request) {
 
   return Response.json({ demo, results: rows, error });
 }
+
+/** POST { phone, 제출일시 } → 결과 시트의 발송여부 칸에 "완료" (카톡용 복사 시 자동 호출) */
+export async function POST(request) {
+  const { extractSheetId, readTab, updateCell } = await import('../../../lib/sheetsWrite');
+  try {
+    const { phone, 제출일시, value } = await request.json();
+    const sheetId = extractSheetId(process.env.NEXT_PUBLIC_LEVELTEST_SHEET_LINK || '');
+    if (!sheetId) return Response.json({ ok: false, error: 'NEXT_PUBLIC_LEVELTEST_SHEET_LINK가 설정되지 않았습니다.' });
+    const tab = process.env.LEVELTEST_SHEET_TAB || '결과';
+    const read = await readTab(sheetId, tab);
+    if (!read.ok) return Response.json({ ok: false, error: read.error });
+    const key = phoneKey(phone);
+    const row = read.rows.find((r) => phoneKey(r['전화번호']) === key && (!제출일시 || r['제출일시'] === 제출일시));
+    if (!row) return Response.json({ ok: false, error: '결과 시트에서 해당 행을 찾지 못했습니다.' });
+    const res = await updateCell(sheetId, tab, row._row, '발송여부', value ?? '완료');
+    return Response.json(res);
+  } catch (err) {
+    return Response.json({ ok: false, error: err.message });
+  }
+}

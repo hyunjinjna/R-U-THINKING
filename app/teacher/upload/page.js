@@ -12,6 +12,22 @@ export default function UploadPage() {
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef(null);
+  const fullRef = useRef(null);
+  const [fullMsg, setFullMsg] = useState('');
+  const [fullBusy, setFullBusy] = useState(false);
+
+  const uploadFull = async (file) => {
+    if (!file) return;
+    setFullBusy(true); setFullMsg('');
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const res = await fetch('/api/classcard-report', { method: 'POST', body: fd });
+      const j = await res.json();
+      setFullMsg(j.ok ? `저장 완료 — 학생 ${j.학생수}명, 세트 ${j.세트수}건 (누적 ${j.전체기록}건). 대시보드에서 숙제·테스트가 자동으로 채워져요.` : `실패: ${j.error}`);
+    } catch (e) { setFullMsg('업로드 실패: ' + e.message); }
+    setFullBusy(false);
+    if (fullRef.current) fullRef.current.value = '';
+  };
 
   useEffect(() => {
     fetch('/api/classes')
@@ -74,6 +90,19 @@ export default function UploadPage() {
 
       <h1 className="page-title">성적 업로드</h1>
       <p className="page-sub">클래스카드 엑셀을 올리면 자동으로 분석해드려요</p>
+
+        <div className="card" style={{ display: 'block', cursor: 'default', marginBottom: 20, borderLeft: '4px solid var(--teal)' }}>
+          <div className="card-title">전체학생 리포트 업로드 (매일 1회)</div>
+          <div className="card-desc" style={{ marginBottom: 10 }}>
+            클래스카드 학원관리 → 클래스카드 리포트 → "7일 이후" → 엑셀 다운로드 → 여기 올리기.
+            반 상관없이 한 번에 저장되고, 대시보드에서 숙제·테스트가 자동 판정돼요.
+          </div>
+          <input ref={fullRef} type="file" accept=".xlsx,.xls" onChange={(e) => uploadFull(e.target.files[0])} disabled={fullBusy} />
+          {fullBusy && <div className="notice" style={{ marginTop: 8 }}>저장 중...</div>}
+          {fullMsg && <div className="notice" style={{ marginTop: 8 }}>{fullMsg}</div>}
+        </div>
+
+        <div className="section-label">반별 분석 (기존 방식)</div>
 
       <div className="notice">
         <div className="notice-title">엑셀 받는 법</div>

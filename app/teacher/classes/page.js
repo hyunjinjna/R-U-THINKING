@@ -18,6 +18,35 @@ export default function ClassesPage() {
   const [isDemo, setIsDemo] = useState(false);
   const [selected, setSelected] = useState(null);
   const [showAll, setShowAll] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelDates, setCancelDates] = useState(['']);
+  const [cancelAll, setCancelAll] = useState(false);
+  const [cancelMsg, setCancelMsg] = useState('');
+  const [cancelBusy, setCancelBusy] = useState(false);
+
+  const submitCancel = async () => {
+    const dates = cancelDates.filter(Boolean);
+    if (dates.length === 0) { setCancelMsg('날짜를 골라주세요.'); return; }
+    const targets = cancelAll
+      ? classes.filter((c) => (c['종료여부'] || '진행중').trim() !== '종료').map((c) => c['반이름'])
+      : [selected['반이름']];
+    setCancelBusy(true); setCancelMsg('');
+    const res = await fetch('/api/cancel-class', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 반이름들: targets, 날짜들: dates }),
+    });
+    const j = await res.json();
+    setCancelBusy(false);
+    if (j.ok) {
+      setCancelMsg(`휴강 등록 완료 (${targets.length}개 반, ${dates.join(', ')}). 회차 계산에 바로 반영돼요.`);
+      setClasses((prev) => prev.map((c) => {
+        const hit = j.results.find((r) => r.반이름 === c['반이름'] && r.ok);
+        return hit ? { ...c, 휴강기록: hit.휴강기록 } : c;
+      }));
+    } else {
+      setCancelMsg('실패: ' + (j.error || (j.results || []).filter((r) => !r.ok).map((r) => `${r.반이름}: ${r.error}`).join(', ')));
+    }
+  };
 
   useEffect(() => {
     fetch('/api/classes')
@@ -103,6 +132,29 @@ export default function ClassesPage() {
         <p className="page-sub">
           {selected['대분류']} · {selected['수업요일']} {selected['수업시간']}
         </p>
+
+        <div style={{ marginBottom: 16 }}>
+          <button className="btn btn-outline" style={{ width: 'auto', padding: '8px 14px', fontSize: 13 }} onClick={() => { setCancelOpen(!cancelOpen); setCancelMsg(''); }}>
+            {cancelOpen ? '휴강 등록 닫기' : '📅 휴강 등록'}
+          </button>
+          {cancelOpen && (
+            <div className="card" style={{ display: 'block', cursor: 'default', marginTop: 10 }}>
+              <div className="card-desc" style={{ marginBottom: 8 }}>휴강 날짜를 고르세요. 연휴면 여러 날 추가. 등록 즉시 운영시트 휴강기록에 들어가고 회차가 밀려요.</div>
+              {cancelDates.map((d, i) => (
+                <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <input type="date" value={d} onChange={(e) => setCancelDates((p) => p.map((v, k) => (k === i ? e.target.value : v)))} style={{ padding: 8, border: '1px solid var(--border)', borderRadius: 8 }} />
+                  {cancelDates.length > 1 && <button onClick={() => setCancelDates((p) => p.filter((_, k) => k !== i))} style={{ background: 'none', border: 0, cursor: 'pointer' }}>✕</button>}
+                </div>
+              ))}
+              <button onClick={() => setCancelDates((p) => [...p, ''])} style={{ background: 'none', border: 0, color: 'var(--navy)', cursor: 'pointer', fontSize: 13, padding: 0 }}>+ 날짜 추가</button>
+              <label style={{ display: 'block', marginTop: 10, fontSize: 13 }}>
+                <input type="checkbox" checked={cancelAll} onChange={(e) => setCancelAll(e.target.checked)} /> 진행 중인 전체 반에 적용 (연휴)
+              </label>
+              <button className="btn" style={{ marginTop: 10 }} onClick={submitCancel} disabled={cancelBusy}>{cancelBusy ? '등록 중...' : '휴강 등록'}</button>
+              {cancelMsg && <div className="notice" style={{ marginTop: 8 }}>{cancelMsg}</div>}
+            </div>
+          )}
+        </div>
 
         {total > 0 && selected.status === '진행중' && (
           <div style={{ marginBottom: 20 }}>

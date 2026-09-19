@@ -19,6 +19,17 @@ export default function StudentPage() {
   const [error, setError] = useState(null);
   const [isDemo, setIsDemo] = useState(false);
   const [homeworkPopup, setHomeworkPopup] = useState(false);
+  const [students, setStudents] = useState([]);
+  const [myName, setMyName] = useState('');
+  const [namePopup, setNamePopup] = useState(false);
+  const [codePopup, setCodePopup] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [codeResult, setCodeResult] = useState('');
+
+  useEffect(() => {
+    fetch('/api/students').then((r) => r.json()).then((j) => setStudents(j.students || [])).catch(() => {});
+    try { setMyName(localStorage.getItem('ru_student_name') || ''); } catch (e) {}
+  }, []);
 
   useEffect(() => {
     fetch('/api/classes')
@@ -63,6 +74,44 @@ export default function StudentPage() {
     );
   }
 
+  const classStudents = selected
+    ? students.filter((st) => String(st['반이름'] || '').split(/[\n,]/).map((v) => v.trim().toLowerCase().replace(/\s+/g, '')).includes(String(selected['반이름'] || '').toLowerCase().replace(/\s+/g, '')))
+    : [];
+
+  const logAndOpen = (name) => {
+    try { localStorage.setItem('ru_student_name', name); } catch (e) {}
+    setMyName(name);
+    setNamePopup(false);
+    // 기록 실패해도 줌은 연다
+    fetch('/api/attendance-log', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 반이름: selected['반이름'], 이름: name }),
+    }).catch(() => {});
+    window.open(selected['줌링크'], '_blank', 'noopener');
+  };
+
+  const enterZoom = () => {
+    const known = myName && classStudents.some((st) => st['이름'] === myName);
+    if (known) logAndOpen(myName);
+    else if (classStudents.length > 0) setNamePopup(true);
+    else window.open(selected['줌링크'], '_blank', 'noopener');
+  };
+
+  const submitCode = async () => {
+    if (!myName) { setCodeResult('먼저 "수업 입장"에서 이름을 골라줘!'); return; }
+    if (!codeInput.trim()) return;
+    setCodeResult('확인 중...');
+    try {
+      const res = await fetch('/api/secret-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 반이름: selected['반이름'], 이름: myName, 코드: codeInput.trim() }),
+      });
+      const j = await res.json();
+      if (!j.ok) setCodeResult(j.error || '오류가 났어요');
+      else setCodeResult(j.correct ? '🎉 정답! 잘 들었네!' : '음, 다시 한 번 생각해볼까?');
+    } catch (e) { setCodeResult('연결이 안 돼요. 잠시 후 다시!'); }
+  };
+
   // ===== 3단계: 반 메뉴 =====
   if (step === 'menu' && selected) {
     const items = [];
@@ -70,10 +119,20 @@ export default function StudentPage() {
     if (selected['줌링크']) {
       items.push({
         label: '수업 입장',
-        desc: '줌으로 접속하기',
+        desc: myName ? `${myName}, 줌으로 접속하기` : '줌으로 접속하기',
         emoji: '🎥',
         color: 'var(--navy)',
-        href: selected['줌링크'],
+        onClick: () => enterZoom(),
+      });
+    }
+
+    if (selected['시크릿코드'] && selected.status === '진행중') {
+      items.push({
+        label: '시크릿코드 입력',
+        desc: '수업 중 선생님이 말한 코드를 적어줘',
+        emoji: '🔑',
+        color: 'var(--purple)',
+        onClick: () => { setCodeInput(''); setCodeResult(''); setCodePopup(true); },
       });
     }
 
@@ -210,6 +269,36 @@ export default function StudentPage() {
                 </a>
               );
             })}
+          </div>
+        )}
+
+        {namePopup && (
+          <div className="modal-backdrop" onClick={() => setNamePopup(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close" onClick={() => setNamePopup(false)}>✕</button>
+              <h2 style={{ marginTop: 0 }}>누구야? 이름을 눌러줘</h2>
+              <div className="card-list">
+                {classStudents.map((st) => (
+                  <button key={st['이름']} className="card" onClick={() => logAndOpen(st['이름'])}>
+                    <div className="card-title">{st['이름']}</div>
+                    <div className="card-arrow">→</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {codePopup && (
+          <div className="modal-backdrop" onClick={() => setCodePopup(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()}>
+              <button className="modal-close" onClick={() => setCodePopup(false)}>✕</button>
+              <h2 style={{ marginTop: 0 }}>🔑 시크릿코드</h2>
+              <p style={{ color: 'var(--med)', fontSize: 14 }}>{myName ? `${myName}, 오늘 선생님이 말한 코드는?` : '먼저 "수업 입장"에서 이름을 골라줘!'}</p>
+              <input value={codeInput} onChange={(e) => setCodeInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitCode()} placeholder="코드 입력" style={{ width: '100%', padding: 12, fontSize: 18, border: '2px solid var(--border)', borderRadius: 10 }} />
+              <button className="btn" style={{ marginTop: 10 }} onClick={submitCode}>확인</button>
+              {codeResult && <div className="notice" style={{ marginTop: 10 }}>{codeResult}</div>}
+            </div>
           </div>
         )}
 

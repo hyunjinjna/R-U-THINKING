@@ -41,14 +41,25 @@ export async function POST(request) {
   let dashboardRows = [];
   let sheetError = null;
 
-  if (IS_DEMO || !dashboardCSV) {
+  // 통합 대시보드 시트가 있으면 그걸 우선 (반이름으로 걸러냄), 없으면 예전 반별 CSV
+  const { dashboardSheetId } = await import('../../../lib/dashboardData');
+  const { readTab } = await import('../../../lib/sheetsWrite');
+  const { DASHBOARD_TAB } = await import('../../../lib/dashboard');
+  const { sameName } = await import('../../../lib/utils');
+  const unifiedId = dashboardSheetId();
+
+  if (IS_DEMO) {
     dashboardRows = DEMO_DASHBOARD;
-  } else {
+  } else if (unifiedId) {
+    const r = await readTab(unifiedId, DASHBOARD_TAB);
+    if (!r.ok) sheetError = r.error;
+    dashboardRows = (r.rows || []).filter((row) => !className || sameName(row['반이름'], className));
+  } else if (dashboardCSV) {
     const result = await fetchSheet(dashboardCSV);
-    if (result.error) {
-      sheetError = result.error;
-    }
+    if (result.error) sheetError = result.error;
     dashboardRows = result.data || [];
+  } else {
+    dashboardRows = DEMO_DASHBOARD;
   }
 
   // 이번 주 + 해당 학생 기록만 필터
