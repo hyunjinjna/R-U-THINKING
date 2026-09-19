@@ -102,15 +102,14 @@ export default function ClassesPage() {
       });
     }
 
-    if (selected['대시보드링크']) {
-      links.push({
-        label: '일일 대시보드',
-        desc: '학생 기록 작성하기',
-        emoji: '📊',
-        color: 'var(--teal)',
-        href: selected['대시보드링크'],
-      });
-    }
+    links.push({
+      label: '오늘 기록하기',
+      desc: '출석·숙제·태도 버튼으로 기록, 저장 한 번',
+      emoji: '📋',
+      color: 'var(--teal)',
+      href: `/teacher/dashboard?class=${encodeURIComponent(selected['반이름'])}`,
+      internal: true,
+    });
 
     if (selected['클래스카드URL']) {
       links.push({
@@ -224,7 +223,7 @@ export default function ClassesPage() {
         {links.length > 0 && (
           <div className="card-list">
             {links.map((l, i) => (
-              <a key={i} href={l.href} target="_blank" rel="noopener noreferrer" className="card">
+              <a key={i} href={l.href} target={l.internal ? '_self' : '_blank'} rel="noopener noreferrer" className="card">
                 <div className="card-icon" style={{ background: l.color }}>{l.emoji}</div>
                 <div>
                   <div className="card-title">{l.label}</div>
@@ -397,7 +396,7 @@ export default function ClassesPage() {
         2. 맨 아래에 새 행을 추가합니다
         <br />
         3. 반이름 · 대분류 · 수업요일 · 수업시간 · 시작일 · <b>총회차</b> · 레벨 · 줌링크 ·
-        대시보드링크 · 대시보드CSV · 필기인증링크를 채웁니다
+        필기인증링크 등을 채웁니다 (대시보드는 통합 시트라 반별 링크 불필요)
         <br />
         4. <b>종료여부</b>는 <code>진행중</code>으로 둡니다
         <br />

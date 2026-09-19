@@ -7,8 +7,7 @@ const MENU = {
     title: '수업 관리',
     emoji: '📚',
     items: [
-      { href: '/teacher/dashboard', icon: '📋', color: 'var(--teal)', title: '일일 대시보드', desc: '출석·숙제·태도 버튼으로 기록, 저장 한 번' },
-      { href: '/teacher/classes', icon: '🏫', color: 'var(--navy)', title: '반 관리', desc: '오늘 수업, 줌 링크, 진도, 휴강 등록' },
+      { href: '/teacher/classes', icon: '🏫', color: 'var(--navy)', title: '반 관리', desc: '오늘 수업, 줌 링크, 진도, 오늘 기록하기, 휴강 등록' },
       { href: '/teacher/report', icon: '📊', color: 'var(--teal)', title: '주간 리포트 생성', desc: '학생별 주간 리포트 자동 작성' },
       { href: '/teacher/upload', icon: '📤', color: 'var(--purple)', title: '성적 업로드', desc: '전체학생 리포트 올리면 숙제·테스트 자동 판정' },
       { href: '/teacher/resources', icon: '📁', color: 'var(--light)', title: '코치 자료', desc: '자주 쓰는 자료 모음' },

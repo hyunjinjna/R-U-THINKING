@@ -61,6 +61,9 @@ export default function DashboardPage() {
   useEffect(() => {
     fetch('/api/dashboard').then((r) => r.json()).then((j) => {
       setClasses(j.classes || []); setDate(j.date || ''); setLoading(false);
+      // 반 관리에서 ?class=반이름 으로 들어오면 그 반을 바로 연다
+      const q = new URLSearchParams(window.location.search).get('class');
+      if (q) openClass(q, j.date || '');
     }).catch(() => setLoading(false));
   }, []);
 
@@ -91,7 +94,9 @@ export default function DashboardPage() {
   if (selected) {
     return (
       <main className="container">
-        <button className="back-link" onClick={() => { setSelected(null); setData(null); }}>← 반 목록</button>
+        {fromClasses
+          ? <Link href="/teacher/classes" className="back-link">← 반 관리</Link>
+          : <button className="back-link" onClick={() => { setSelected(null); setData(null); }}>← 반 목록</button>}
         <h1 className="page-title">{selected}</h1>
         {!data && !msg && <div className="empty">학생 정보와 자동 판정을 불러오는 중...</div>}
         {msg && !data && <div className="error-box">{msg}</div>}
@@ -160,7 +165,7 @@ export default function DashboardPage() {
   const list = showAll ? classes : todays;
   return (
     <main className="container">
-      <Link href="/teacher" className="back-link">← 선생님 홈</Link>
+      <Link href="/teacher/classes" className="back-link">← 반 관리</Link>
       <h1 className="page-title">일일 대시보드</h1>
       <p className="page-sub">반을 누르면 학생 전원이 한 화면에 나와요. 버튼 다 누르고 저장 한 번.</p>
       <div className="field" style={{ marginBottom: 12 }}>
