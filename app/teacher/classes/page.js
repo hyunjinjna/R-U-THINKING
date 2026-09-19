@@ -24,6 +24,7 @@ export default function ClassesPage() {
   const [cancelMsg, setCancelMsg] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
   const [overdue, setOverdue] = useState({}); // 반이름 -> 숙제 X 학생 수
+  const [recorded, setRecorded] = useState([]); // 대시보드에 기록이 있는 반 목록
 
   const submitCancel = async () => {
     const dates = cancelDates.filter(Boolean);
@@ -65,7 +66,7 @@ export default function ClassesPage() {
     // 반별 숙제 미완료(최근 기록 X) 학생 수 — 배지용
     fetch('/api/overdue-summary')
       .then((r) => r.json())
-      .then((j) => setOverdue(j.counts || {}))
+      .then((j) => { setOverdue(j.counts || {}); setRecorded(j.recorded || []); })
       .catch(() => {});
   }, []);
 
@@ -276,14 +277,25 @@ export default function ClassesPage() {
     byCategory[cat].push(c);
   });
 
+  const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
   const overdueOf = (className) => {
-    const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
     const key = Object.keys(overdue).find((k) => norm(k) === norm(className));
     return key ? overdue[key] : 0;
   };
+  const hasRecord = (className) => recorded.some((k) => norm(k) === norm(className));
+
+  // 배지 4단계: 밀림 있음(빨강) / 밀림 없음 / 개강 전 / 기록 없음
+  const homeworkBadge = (c) => {
+    if (c.status === '개강 전') return { text: '개강 전', bg: 'var(--border)', color: 'var(--med)' };
+    if (c.status !== '진행중') return null;
+    if (!hasRecord(c['반이름'])) return { text: '기록 없음', bg: 'var(--border)', color: 'var(--med)' };
+    const od = overdueOf(c['반이름']);
+    if (od > 0) return { text: `숙제 밀림 ${od}명`, bg: 'var(--red)', color: '#fff' };
+    return { text: '숙제 밀림 없음', bg: 'var(--soft-teal)', color: 'var(--teal)' };
+  };
 
   const renderCard = (c, i) => {
-    const od = overdueOf(c['반이름']);
+    const badge = homeworkBadge(c);
     return (
     <button key={i} className="card" onClick={() => setSelected(c)}>
       <div
@@ -298,9 +310,9 @@ export default function ClassesPage() {
       <div>
         <div className="card-title">
           {c['반이름']}
-          {od > 0 && (
-            <span style={{ marginLeft: 8, background: 'var(--red)', color: '#fff', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 10, verticalAlign: 'middle' }}>
-              숙제 밀림 {od}명
+          {badge && (
+            <span style={{ marginLeft: 8, background: badge.bg, color: badge.color, fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 10, verticalAlign: 'middle' }}>
+              {badge.text}
             </span>
           )}
         </div>

@@ -34,13 +34,15 @@ export async function GET() {
     }
   }
 
-  // 반이름(원본 표기)별 숙제 X 카운트
+  // 반이름(원본 표기)별 숙제 X 카운트 + 기록이 하나라도 있는 반 목록
   const counts = {};
+  const recorded = new Set();
   for (const row of latest.values()) {
-    if (String(row['숙제'] || '').trim() !== 'X') continue;
     const cls = String(row['반이름'] || '').trim();
+    recorded.add(cls);
+    if (String(row['숙제'] || '').trim() !== 'X') continue;
     counts[cls] = (counts[cls] || 0) + 1;
   }
 
-  return Response.json({ counts });
+  return Response.json({ counts, recorded: [...recorded] });
 }

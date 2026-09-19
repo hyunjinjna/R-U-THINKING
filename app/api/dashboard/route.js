@@ -1,3 +1,5 @@
+import { testInfoFor } from '../../../lib/curriculum';
+import { loadClasscardSets } from '../../../lib/curriculumData';
 import { fetchSheet } from '../../../lib/sheets';
 import { SHEET_URLS, IS_DEMO } from '../../../lib/config';
 import { formatDate, getKoreaNow, hasClassToday } from '../../../lib/week';
@@ -66,6 +68,12 @@ export async function GET(request) {
   const prevStart = prevDate ? classStartAt(formatDate(prevDate), cls['수업시간']) : null;
   const unit = prevRow ? extractUnit(prevRow['진도']) : null;
   const textbooks = splitMulti(cls['교재']);
+  // 수업 시작 5분 테스트 (오늘 회차 유닛 n의 지난 유닛 n-1)
+  const { sets: ccSets } = await loadClasscardSets();
+  const testInfo = testInfoFor({
+    category: cls['대분류'], textbook: textbooks[0] || '',
+    unit: row ? extractUnit(row['진도']) : null, sets: ccSets,
+  });
   const expectedCode = row ? (row['시크릿코드'] || row['시크릿 코드'] || '') : '';
 
   const rows = roster.map((s) => {
@@ -100,6 +108,7 @@ export async function GET(request) {
   return Response.json({
     demo: IS_DEMO, warnings, date, 반이름: cls['반이름'], 수업시간: cls['수업시간'], 회차: session,
     진도: row ? row['진도'] : '', 숙제유닛: unit, 시크릿코드: expectedCode, 교재: textbooks,
+    테스트: testInfo,
     settings, rows, canSave: !!sheetId && !IS_DEMO,
   });
 }
