@@ -7,3 +7,4 @@ writeFileSync('/tmp/rt/package.json', '{"type":"module"}');
 import { readdirSync, readFileSync } from 'node:fs';
 for (const f of readdirSync('/tmp/rt/lib')) { const p = '/tmp/rt/lib/' + f; writeFileSync(p, readFileSync(p, 'utf8').replace(/from '\.\/(\w+)'/g, "from './$1.js'")); }
 await import('/tmp/rt/tests/dashboard.test.mjs');
+await import('/tmp/rt/tests/week.test.mjs');

@@ -1,7 +1,11 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { daysSinceLastClass, filterHomeworkByDay } from '../lib/week';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import {
+  daysSinceLastClass, filterHomeworkByDay, lastClassDate,
+  hasClassToday, isCancelledToday, getKoreaNow,
+} from '../lib/week';
+import { classStartAt } from '../lib/dashboard';
 
 const CATEGORY_STYLE = {
   파닉스: { color: 'var(--red)', emoji: '🔤' },
@@ -10,8 +14,56 @@ const CATEGORY_STYLE = {
   스피킹: { color: 'var(--pink)', emoji: '🗣️' },
 };
 
+const MAKEUP_VIDEO_DAYS = 3; // 결석 보강 영상 노출 기간
+const ZOOM_LIVE_MINUTES = 30; // 수업 시작 후 몇 분까지 [줌 입장] 유지
+
+const PROFILE_KEY = 'ru_home_profile'; // { 이름, 전화, 반들: [] }
+
+function digitsOnly(str) {
+  return String(str || '').replace(/[^0-9]/g, '');
+}
+
+function parentPhoneOf(studentRow) {
+  return studentRow['학부모 연락처'] || studentRow['학부모전화'] || studentRow['학부모연락처'] || studentRow['전화번호'] || '';
+}
+
+function normName(str) {
+  return String(str || '').replace(/\s+/g, '').toLowerCase();
+}
+
+// classStartAt은 "YYYY-MM-DD" 문자열을 받으므로 now(Date)를 변환
+function fmtDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// ===== 오늘 수업 판단 =====
+function todayInfo(cls, now) {
+  if ((cls['종료여부'] || '').trim() === '종료' || cls.status === '커리큘럼 완료') {
+    return { type: 'ended' };
+  }
+  if (cls.status === '개강 전') {
+    return { type: 'before-start', 시작일: cls['시작일'] };
+  }
+  if (isCancelledToday(cls, now)) {
+    return { type: 'cancelled' };
+  }
+  if (hasClassToday(cls, now)) {
+    const start = classStartAt(fmtDateStr(now), cls['수업시간']);
+    if (!start) return { type: 'today', phase: 'live' };
+    const diffMin = Math.floor((now - start) / 60000);
+    if (diffMin < 0) return { type: 'today', phase: 'before', start };
+    if (diffMin <= ZOOM_LIVE_MINUTES) return { type: 'today', phase: 'live', start };
+    return { type: 'today', phase: 'after', start };
+  }
+  return { type: 'none' };
+}
+
 export default function StudentPage() {
-  const [step, setStep] = useState('category');
+  // step: 'loading' | 'onboarding' | 'home' | 'category' | 'class' | 'menu' | 'concept'
+  const [step, setStep] = useState('loading');
   const [category, setCategory] = useState(null);
   const [selected, setSelected] = useState(null);
   const [classes, setClasses] = useState([]);
@@ -25,10 +77,26 @@ export default function StudentPage() {
   const [codePopup, setCodePopup] = useState(false);
   const [codeInput, setCodeInput] = useState('');
   const [codeResult, setCodeResult] = useState('');
+  const [conceptClass, setConceptClass] = useState(null);
+
+  // ===== 신규: 홈 화면 상태 =====
+  const [profile, setProfile] = useState(null); // { 이름, 전화, 반들 }
+  const [onboardName, setOnboardName] = useState('');
+  const [onboardPhone, setOnboardPhone] = useState('');
+  const [onboardError, setOnboardError] = useState('');
+  const [statuses, setStatuses] = useState({}); // 반이름 -> {날짜,회차,출석,숙제,재시결과}
+  const [makeupVideos, setMakeupVideos] = useState({}); // 반이름 -> {영상URL, 진도}
+  const [now, setNow] = useState(getKoreaNow());
 
   useEffect(() => {
     fetch('/api/students').then((r) => r.json()).then((j) => setStudents(j.students || [])).catch(() => {});
-    try { setMyName(localStorage.getItem('ru_student_name') || ''); } catch (e) {}
+    try {
+      const raw = localStorage.getItem(PROFILE_KEY);
+      if (raw) setProfile(JSON.parse(raw));
+    } catch (e) {}
+    // 시간대별 안내 문구(수업 시작~30분 등) 갱신용
+    const timer = setInterval(() => setNow(getKoreaNow()), 60000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -46,6 +114,17 @@ export default function StudentPage() {
       });
   }, []);
 
+  // 학생·반 데이터가 준비되면 첫 화면 결정
+  useEffect(() => {
+    if (loading) return;
+    if (profile && profile.이름) {
+      setStep('home');
+    } else {
+      setStep('onboarding');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, profile]);
+
   const activeClasses = classes.filter(
     (c) => (c['종료여부'] || '진행중').trim() !== '종료'
   );
@@ -56,7 +135,45 @@ export default function StudentPage() {
   const pointsLink = process.env.NEXT_PUBLIC_POINTS_LINK || '';
   const kakaoLink = process.env.NEXT_PUBLIC_KAKAO_CHANNEL_LINK || '';
 
-  if (loading) {
+  // 내 반 목록 (profile.반들 이름 → classes에서 실제 객체 찾기)
+  const myClasses = useMemo(() => {
+    if (!profile || !profile.반들) return [];
+    return profile.반들
+      .map((n) => classes.find((c) => normName(c['반이름']) === normName(n)))
+      .filter(Boolean);
+  }, [profile, classes]);
+
+  // 밀린 숙제·결석 보강 조회
+  useEffect(() => {
+    if (!profile || !profile.이름 || myClasses.length === 0) return;
+    const 반들 = myClasses.map((c) => c['반이름']).join(',');
+    fetch(`/api/student-status?이름=${encodeURIComponent(profile.이름)}&반들=${encodeURIComponent(반들)}`)
+      .then((r) => r.json())
+      .then((j) => setStatuses(j.statuses || {}))
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, myClasses.length]);
+
+  // 결석 보강 영상: 최근 기록이 결석이고 3일 이내인 반만 조회
+  useEffect(() => {
+    const targets = myClasses.filter((c) => {
+      const s = statuses[c['반이름']];
+      if (!s || s.출석 !== '결석' || !s.날짜) return false;
+      const days = Math.floor((now - new Date(s.날짜)) / 86400000);
+      return days >= 0 && days < MAKEUP_VIDEO_DAYS;
+    });
+    targets.forEach((c) => {
+      if (makeupVideos[c['반이름']] !== undefined) return;
+      const s = statuses[c['반이름']];
+      fetch(`/api/makeup-video?반=${encodeURIComponent(c['반이름'])}&회차=${encodeURIComponent(s.회차)}`)
+        .then((r) => r.json())
+        .then((j) => setMakeupVideos((prev) => ({ ...prev, [c['반이름']]: j })))
+        .catch(() => {});
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myClasses, statuses]);
+
+  if (loading || step === 'loading') {
     return (
       <main className="container">
         <div className="empty">불러오는 중...</div>
@@ -65,29 +182,140 @@ export default function StudentPage() {
   }
 
   // ===== 개념 설명하기 =====
-  if (step === 'concept' && selected) {
+  if (step === 'concept' && conceptClass) {
     return (
       <ConceptMode
-        classData={selected}
-        onBack={() => setStep('menu')}
+        classData={conceptClass}
+        onBack={() => setStep(profile ? 'home' : 'menu')}
       />
     );
   }
 
-  const classStudents = selected
-    ? students.filter((st) => String(st['반이름'] || '').split(/[\n,]/).map((v) => v.trim().toLowerCase().replace(/\s+/g, '')).includes(String(selected['반이름'] || '').toLowerCase().replace(/\s+/g, '')))
-    : [];
+  const classStudentsOf = (cls) => students.filter((st) =>
+    String(st['반이름'] || '').split(/[\n,]/).map((v) => normName(v)).includes(normName(cls['반이름']))
+  );
+
+  const openZoom = (cls, name) => {
+    fetch('/api/attendance-log', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 반이름: cls['반이름'], 이름: name }),
+    }).catch(() => {});
+    window.open(cls['줌링크'], '_blank', 'noopener');
+  };
+
+  const enterZoomFor = (cls) => {
+    const name = (profile && profile.이름) || myName;
+    if (name) { openZoom(cls, name); return; }
+    const cs = classStudentsOf(cls);
+    if (cs.length > 0) { setSelected(cls); setNamePopup(true); }
+    else window.open(cls['줌링크'], '_blank', 'noopener');
+  };
+
+  // ===== 온보딩: 이름 + 학부모 연락처로 학생명단 대조 =====
+  const submitOnboarding = () => {
+    const name = onboardName.trim();
+    const phoneDigits = digitsOnly(onboardPhone);
+    if (!name) { setOnboardError('이름을 입력해줘!'); return; }
+    if (phoneDigits.length < 8) { setOnboardError('학부모님 전화번호를 정확히 입력해줘!'); return; }
+
+    const matches = students.filter((s) =>
+      normName(s['이름']) === normName(name) && digitsOnly(parentPhoneOf(s)) === phoneDigits
+    );
+
+    if (matches.length === 0) {
+      setOnboardError('학생명단에서 못 찾았어요. 이름·전화번호를 다시 확인하거나, 선생님께 문의해줘!');
+      return;
+    }
+
+    const 반들 = [...new Set(
+      matches.flatMap((s) => String(s['반이름'] || '').split(/[\n,]/).map((v) => v.trim()).filter(Boolean))
+    )];
+
+    const newProfile = { 이름: name, 전화: phoneDigits, 반들 };
+    try { localStorage.setItem(PROFILE_KEY, JSON.stringify(newProfile)); } catch (e) {}
+    try { localStorage.setItem('ru_student_name', name); } catch (e) {}
+    setProfile(newProfile);
+    setMyName(name);
+    setOnboardError('');
+    setStep('home');
+  };
+
+  if (step === 'onboarding') {
+    return (
+      <main className="container">
+        <div className="logo-row">
+          <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
+          <span className="badge">R U Thinking?</span>
+        </div>
+        <h1 className="page-title">처음 왔구나! 👋</h1>
+        <p className="page-sub">이름이랑 학부모님 전화번호를 알려줘. 다음부터는 자동으로 열려!</p>
+
+        {onboardError && <div className="error-box">{onboardError}</div>}
+
+        <div className="field">
+          <label>이름</label>
+          <input value={onboardName} onChange={(e) => setOnboardName(e.target.value)} placeholder="예: 김민준" />
+        </div>
+        <div className="field">
+          <label>학부모님 전화번호</label>
+          <input value={onboardPhone} onChange={(e) => setOnboardPhone(e.target.value)} placeholder="010-0000-0000" inputMode="numeric" />
+        </div>
+        <button className="btn" onClick={submitOnboarding}>시작하기</button>
+
+        <div style={{ textAlign: 'center', marginTop: 22 }}>
+          <button className="back-link" style={{ background: 'none', border: 'none' }} onClick={() => setStep('category')}>
+            반 직접 찾기 →
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  // ===== 홈 화면 =====
+  if (step === 'home') {
+    return (
+      <HomeScreen
+        profile={profile}
+        myClasses={myClasses}
+        statuses={statuses}
+        makeupVideos={makeupVideos}
+        now={now}
+        pointsLink={pointsLink}
+        kakaoLink={kakaoLink}
+        onEnterZoom={enterZoomFor}
+        onOpenConcept={(cls) => { setConceptClass(cls); setStep('concept'); }}
+        onOpenCode={(cls) => { setSelected(cls); setCodeInput(''); setCodeResult(''); setCodePopup(true); }}
+        onFindClass={() => setStep('category')}
+        codePopup={codePopup}
+        setCodePopup={setCodePopup}
+        codeInput={codeInput}
+        setCodeInput={setCodeInput}
+        codeResult={codeResult}
+        myName={profile ? profile.이름 : myName}
+        submitCode={async () => {
+          if (!codeInput.trim() || !selected) return;
+          setCodeResult('확인 중...');
+          try {
+            const res = await fetch('/api/secret-code', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ 반이름: selected['반이름'], 이름: (profile ? profile.이름 : myName), 코드: codeInput.trim() }),
+            });
+            const j = await res.json();
+            if (!j.ok) setCodeResult(j.error || '오류가 났어요');
+            else setCodeResult(j.correct ? '🎉 정답! 잘 들었네!' : '음, 다시 한 번 생각해볼까?');
+          } catch (e) { setCodeResult('연결이 안 돼요. 잠시 후 다시!'); }
+        }}
+      />
+    );
+  }
+
+  const classStudents = selected ? classStudentsOf(selected) : [];
 
   const logAndOpen = (name) => {
     try { localStorage.setItem('ru_student_name', name); } catch (e) {}
     setMyName(name);
     setNamePopup(false);
-    // 기록 실패해도 줌은 연다
-    fetch('/api/attendance-log', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 반이름: selected['반이름'], 이름: name }),
-    }).catch(() => {});
-    window.open(selected['줌링크'], '_blank', 'noopener');
+    openZoom(selected, name);
   };
 
   const enterZoom = () => {
@@ -112,7 +340,7 @@ export default function StudentPage() {
     } catch (e) { setCodeResult('연결이 안 돼요. 잠시 후 다시!'); }
   };
 
-  // ===== 3단계: 반 메뉴 =====
+  // ===== 3단계: 반 메뉴 (반 직접 찾기 경로) =====
   if (step === 'menu' && selected) {
     const items = [];
 
@@ -147,7 +375,7 @@ export default function StudentPage() {
     }
 
     const dayOffset = daysSinceLastClass(selected);
-    const hw = filterHomeworkByDay(selected['숙제범위'], dayOffset);
+    const hw = filterHomeworkByDay(selected['숙제범위'], dayOffset, lastClassDate(selected));
 
     if (selected['숙제범위']) {
       const lockedCount = hw.locked.length;
@@ -168,7 +396,7 @@ export default function StudentPage() {
         desc: 'AI 선생님에게 오늘 배운 거 설명하기',
         emoji: '🗣️',
         color: 'var(--purple)',
-        onClick: () => setStep('concept'),
+        onClick: () => { setConceptClass(selected); setStep('concept'); },
       });
     }
 
@@ -310,8 +538,12 @@ export default function StudentPage() {
               </button>
               <div className="modal-title">이번 회차 숙제</div>
 
-              {hw.visible ? (
-                <div className="modal-body">{hw.visible}</div>
+              {hw.visible.length > 0 ? (
+                <div className="card-list">
+                  {hw.visible.map((item, i) => (
+                    <HomeworkLine key={i} item={item} />
+                  ))}
+                </div>
               ) : (
                 <div className="modal-body" style={{ color: 'var(--med)' }}>
                   오늘 할 숙제가 아직 열리지 않았어요.
@@ -326,9 +558,9 @@ export default function StudentPage() {
                   {hw.locked.map((l, i) => (
                     <div key={i} className="locked-item">
                       <span>🔒</span>
-                      <span>{l.text}</span>
+                      <span>{l.title}</span>
                       <span style={{ marginLeft: 'auto', fontSize: 13 }}>
-                        수업 {l.opensAt}일 뒤 열림
+                        {l.opensWeekday ? `${l.opensWeekday}요일에 열려요` : `수업 ${l.opensAt}일 뒤 열림`}
                       </span>
                     </div>
                   ))}
@@ -385,9 +617,14 @@ export default function StudentPage() {
     );
   }
 
-  // ===== 1단계: 대분류 =====
+  // ===== 1단계: 대분류 (반 직접 찾기) =====
   return (
     <main className="container">
+      {profile && (
+        <button className="back-link" onClick={() => setStep('home')}>
+          ← 홈으로
+        </button>
+      )}
       <div className="logo-row">
         <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
         <span className="badge">R U Thinking?</span>
@@ -450,6 +687,306 @@ export default function StudentPage() {
         </>
       )}
     </main>
+  );
+}
+
+// ===== 숙제 한 줄 표시 (링크 있으면 버튼) =====
+function HomeworkLine({ item }) {
+  if (item.link) {
+    return (
+      <a href={item.link} target="_blank" rel="noopener noreferrer" className="card">
+        <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>📝</div>
+        <div className="card-title" style={{ fontSize: 14 }}>{item.title}</div>
+        <div className="card-arrow">→</div>
+      </a>
+    );
+  }
+  return (
+    <div className="card" style={{ cursor: 'default' }}>
+      <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>📝</div>
+      <div className="card-title" style={{ fontSize: 14 }}>{item.title}</div>
+    </div>
+  );
+}
+
+// ===== 홈 화면 컴포넌트 =====
+function HomeScreen({
+  profile, myClasses, statuses, makeupVideos, now, pointsLink, kakaoLink,
+  onEnterZoom, onOpenConcept, onOpenCode, onFindClass,
+  codePopup, setCodePopup, codeInput, setCodeInput, codeResult, myName, submitCode,
+}) {
+  const ongoingClasses = myClasses.filter((c) => c.status === '진행중');
+
+  // 오늘 눈에 띄게 보여줄 카드가 있는 반들
+  const todayCards = myClasses
+    .map((c) => ({ cls: c, info: todayInfo(c, now) }))
+    .filter(({ info }) => info.type !== 'none');
+
+  const overdue = ongoingClasses.filter((c) => statuses[c['반이름']]?.숙제 === 'X');
+
+  const makeupCards = ongoingClasses.filter((c) => {
+    const v = makeupVideos[c['반이름']];
+    return v && v.영상URL;
+  });
+
+  return (
+    <main className="container">
+      <div className="logo-row">
+        <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
+        <span className="badge">R U Thinking?</span>
+      </div>
+      <h1 className="page-title">안녕, {profile.이름}! 👋</h1>
+      <p className="page-sub">오늘도 화이팅!</p>
+
+      {/* ===== 오늘의 수업 ===== */}
+      <div className="section-label">오늘의 수업</div>
+      {todayCards.length === 0 ? (
+        <div className="notice">오늘은 예정된 수업이 없어요. 숙제부터 확인해볼까? 😊</div>
+      ) : (
+        <div className="card-list">
+          {todayCards.map(({ cls, info }, i) => (
+            <TodayCard key={i} cls={cls} info={info} onEnterZoom={onEnterZoom} />
+          ))}
+        </div>
+      )}
+
+      {/* ===== 결석 보강 영상 ===== */}
+      {makeupCards.map((c) => (
+        <div key={c['반이름']} className="card" style={{ marginTop: 12 }}>
+          <div className="card-icon" style={{ background: 'var(--pink)', color: '#fff' }}>🎬</div>
+          <div style={{ flex: 1 }}>
+            <div className="card-title">{c['반이름']} 결석 보강</div>
+            <div className="card-desc">지난 수업 놓쳤지? 영상으로 다시 볼 수 있어! (3일간)</div>
+          </div>
+          <a href={makeupVideos[c['반이름']].영상URL} target="_blank" rel="noopener noreferrer" className="btn" style={{ width: 'auto', padding: '10px 16px', flexShrink: 0 }}>
+            보기
+          </a>
+        </div>
+      ))}
+
+      {/* ===== 밀린 숙제 ===== */}
+      {overdue.length > 0 && (
+        <>
+          <div className="section-label">⚠️ 밀린 숙제</div>
+          <div className="card-list">
+            {overdue.map((c) => (
+              <div key={c['반이름']} className="card" style={{ cursor: 'default', borderColor: 'var(--red)' }}>
+                <div className="card-icon" style={{ background: 'var(--red)' }}>❗</div>
+                <div>
+                  <div className="card-title">{c['반이름']}</div>
+                  <div className="card-desc">아직 다 못한 숙제가 있어요. 아래에서 확인해줘!</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ===== 반별 숙제·메뉴 섹션 ===== */}
+      {ongoingClasses.length > 0 && (
+        <>
+          <div className="section-label">내 숙제</div>
+          <div className="card-list" style={{ gap: 20 }}>
+            {ongoingClasses.map((c) => (
+              <ClassSection
+                key={c['반이름']}
+                cls={c}
+                onOpenConcept={onOpenConcept}
+                onOpenCode={onOpenCode}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {pointsLink && (
+        <>
+          <div className="section-label">포인트</div>
+          <a href={pointsLink} target="_blank" rel="noopener noreferrer" className="card">
+            <div className="card-icon" style={{ background: 'var(--red)' }}>⭐</div>
+            <div>
+              <div className="card-title">내 포인트 보기</div>
+              <div className="card-desc">모은 포인트 확인하기</div>
+            </div>
+            <div className="card-arrow">→</div>
+          </a>
+        </>
+      )}
+
+      {kakaoLink && (
+        <>
+          <div className="section-label">문의하기</div>
+          <a href={kakaoLink} target="_blank" rel="noopener noreferrer" className="card">
+            <div className="card-icon" style={{ background: '#FEE500', color: '#3A1D1D' }}>💬</div>
+            <div>
+              <div className="card-title">질문하기</div>
+              <div className="card-desc">선생님께 카톡으로 문의하기</div>
+            </div>
+            <div className="card-arrow">→</div>
+          </a>
+        </>
+      )}
+
+      <div style={{ textAlign: 'right', marginTop: 30 }}>
+        <button onClick={onFindClass} style={{ background: 'none', border: 'none', color: 'var(--light)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+          반 직접 찾기
+        </button>
+      </div>
+
+      {codePopup && (
+        <div className="modal-backdrop" onClick={() => setCodePopup(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <button className="modal-close" onClick={() => setCodePopup(false)}>✕</button>
+            <h2 style={{ marginTop: 0 }}>🔑 시크릿코드</h2>
+            <p style={{ color: 'var(--med)', fontSize: 14 }}>{myName}, 오늘 선생님이 말한 코드는?</p>
+            <input value={codeInput} onChange={(e) => setCodeInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submitCode()} placeholder="코드 입력" style={{ width: '100%', padding: 12, fontSize: 18, border: '2px solid var(--border)', borderRadius: 10 }} />
+            <button className="btn" style={{ marginTop: 10 }} onClick={submitCode}>확인</button>
+            {codeResult && <div className="notice" style={{ marginTop: 10 }}>{codeResult}</div>}
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function TodayCard({ cls, info, onEnterZoom }) {
+  if (info.type === 'ended') {
+    return (
+      <div className="card" style={{ cursor: 'default' }}>
+        <div className="card-icon" style={{ background: 'var(--light)' }}>🎓</div>
+        <div>
+          <div className="card-title">{cls['반이름']} 끝!</div>
+          <div className="card-desc">다음 반은 선생님이 알려줄 거예요</div>
+        </div>
+      </div>
+    );
+  }
+  if (info.type === 'before-start') {
+    return (
+      <div className="card" style={{ cursor: 'default' }}>
+        <div className="card-icon" style={{ background: 'var(--teal)' }}>📅</div>
+        <div>
+          <div className="card-title">{cls['반이름']}</div>
+          <div className="card-desc">{info.시작일} 첫 수업</div>
+        </div>
+      </div>
+    );
+  }
+  if (info.type === 'cancelled') {
+    return (
+      <div className="card" style={{ cursor: 'default' }}>
+        <div className="card-icon" style={{ background: 'var(--yellow)' }}>💤</div>
+        <div>
+          <div className="card-title">{cls['반이름']}</div>
+          <div className="card-desc">오늘 휴강이에요</div>
+        </div>
+      </div>
+    );
+  }
+  // type === 'today'
+  if (info.phase === 'before') {
+    return (
+      <div className="card" style={{ cursor: 'default' }}>
+        <div className="card-icon" style={{ background: 'var(--navy)' }}>🎥</div>
+        <div>
+          <div className="card-title">{cls['반이름']}</div>
+          <div className="card-desc">{cls['수업시간']}에 수업이 있어요</div>
+        </div>
+      </div>
+    );
+  }
+  if (info.phase === 'after') {
+    return (
+      <div className="card" style={{ cursor: 'default' }}>
+        <div className="card-icon" style={{ background: 'var(--teal)' }}>📝</div>
+        <div>
+          <div className="card-title">{cls['반이름']} 수업 끝!</div>
+          <div className="card-desc">이제 숙제하자</div>
+        </div>
+      </div>
+    );
+  }
+  // live
+  return (
+    <>
+      <button className="card" onClick={() => onEnterZoom(cls)}>
+        <div className="card-icon" style={{ background: 'var(--navy)' }}>🎥</div>
+        <div>
+          <div className="card-title">{cls['반이름']} 수업 입장</div>
+          <div className="card-desc">{cls['진도'] && `${cls['진도']} · `}지금 줌으로 들어가요</div>
+        </div>
+        <div className="card-arrow">→</div>
+      </button>
+      <ZoomTroubleHint />
+    </>
+  );
+}
+
+function ZoomTroubleHint() {
+  return (
+    <div style={{ fontSize: 11, color: 'var(--light)', margin: '-6px 0 0 4px' }}>
+      줌이 안 열려요? 인터넷 연결을 확인하거나 선생님께 카톡으로 알려줘!
+    </div>
+  );
+}
+
+function ClassSection({ cls, onOpenConcept, onOpenCode }) {
+  const dayOffset = daysSinceLastClass(cls);
+  const hw = filterHomeworkByDay(cls['숙제범위'], dayOffset, lastClassDate(cls));
+
+  return (
+    <div style={{ border: '2px solid var(--border)', borderRadius: 14, padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span className="tag">{cls['대분류'] || '수업'}</span>
+        <span style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 15 }}>{cls['반이름']}</span>
+      </div>
+      {cls['진도'] && <div style={{ fontSize: 12, color: 'var(--med)', marginBottom: 10 }}>{cls['진도']}</div>}
+
+      {hw.visible.length === 0 && hw.locked.length === 0 && (
+        <div style={{ fontSize: 13, color: 'var(--light)', marginBottom: 6 }}>오늘 확인할 숙제가 없어요.</div>
+      )}
+
+      {hw.visible.map((item, i) => (
+        <HomeworkLine key={i} item={item} />
+      ))}
+
+      {hw.locked.length > 0 && (
+        <div style={{ marginTop: 4 }}>
+          {hw.locked.map((l, i) => (
+            <div key={i} className="locked-item" style={{ padding: '6px 0' }}>
+              <span>🔒</span>
+              <span>{l.title}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 12 }}>
+                {l.opensWeekday ? `${l.opensWeekday}요일에 열려요` : `${l.opensAt}일 뒤 열림`}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+        {cls['클래스카드URL'] && (
+          <a href={cls['클래스카드URL']} target="_blank" rel="noopener noreferrer" className="tag" style={{ background: 'var(--soft-teal)', color: 'var(--teal)' }}>
+            📚 단어 공부
+          </a>
+        )}
+        {cls['개념설명숙제'] && (
+          <button onClick={() => onOpenConcept(cls)} className="tag" style={{ background: '#f3e8ff', color: 'var(--purple)', border: 'none', cursor: 'pointer' }}>
+            🗣️ 개념 설명하기
+          </button>
+        )}
+        {cls['시크릿코드'] && cls.status === '진행중' && (
+          <button onClick={() => onOpenCode(cls)} className="tag" style={{ background: '#f3e8ff', color: 'var(--purple)', border: 'none', cursor: 'pointer' }}>
+            🔑 시크릿코드
+          </button>
+        )}
+        {cls['필기인증링크'] && (
+          <a href={cls['필기인증링크']} target="_blank" rel="noopener noreferrer" className="tag" style={{ background: '#ffe4ec', color: 'var(--pink)' }}>
+            📸 필기 인증샷
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 
