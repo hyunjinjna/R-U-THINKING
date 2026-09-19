@@ -738,7 +738,7 @@ function HomeworkLine({ item }) {
     return (
       <a href={item.link} target="_blank" rel="noopener noreferrer" className="card">
         <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>📝</div>
-        <div className="card-title" style={{ fontSize: 14 }}>{item.title}</div>
+        <div className="card-title" style={{ fontSize: 16 }}>{item.title}</div>
         <div className="card-arrow">→</div>
       </a>
     );
@@ -746,7 +746,7 @@ function HomeworkLine({ item }) {
   return (
     <div className="card" style={{ cursor: 'default' }}>
       <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>📝</div>
-      <div className="card-title" style={{ fontSize: 14 }}>{item.title}</div>
+      <div className="card-title" style={{ fontSize: 16 }}>{item.title}</div>
     </div>
   );
 }
@@ -794,9 +794,9 @@ function HomeScreen({
       )}
 
       {/* ===== 오늘의 수업 ===== */}
-      <div className="section-label">오늘의 수업</div>
+      <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>오늘의 수업</div>
       {todayCards.length === 0 ? (
-        <div className="notice">오늘은 예정된 수업이 없어요. 숙제부터 확인해볼까? 😊</div>
+        <div className="notice" style={{ fontSize: 15 }}>오늘은 예정된 수업이 없어요. 숙제부터 확인해볼까? 😊</div>
       ) : (
         <div className="card-list">
           {todayCards.map(({ cls, info }, i) => (
@@ -822,7 +822,7 @@ function HomeScreen({
       {/* ===== 밀린 숙제 ===== */}
       {overdue.length > 0 && (
         <>
-          <div className="section-label">⚠️ 밀린 숙제</div>
+          <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>⚠️ 밀린 숙제</div>
           <div className="card-list">
             {overdue.map((c) => (
               <div key={c['반이름']} className="card" style={{ cursor: 'default', borderColor: 'var(--red)' }}>
@@ -840,7 +840,7 @@ function HomeScreen({
       {/* ===== 반별 숙제·메뉴 섹션 ===== */}
       {ongoingClasses.length > 0 && (
         <>
-          <div className="section-label">내 숙제</div>
+          <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>내 숙제</div>
           <div className="card-list" style={{ gap: 20 }}>
             {ongoingClasses.map((c) => (
               <ClassSection
@@ -856,7 +856,7 @@ function HomeScreen({
 
       {pointsLink && (
         <>
-          <div className="section-label">포인트</div>
+          <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>포인트</div>
           <a href={pointsLink} target="_blank" rel="noopener noreferrer" className="card">
             <div className="card-icon" style={{ background: 'var(--red)' }}>⭐</div>
             <div>
@@ -870,7 +870,7 @@ function HomeScreen({
 
       {kakaoLink && (
         <>
-          <div className="section-label">문의하기</div>
+          <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>문의하기</div>
           <a href={kakaoLink} target="_blank" rel="noopener noreferrer" className="card">
             <div className="card-icon" style={{ background: '#FEE500', color: '#3A1D1D' }}>💬</div>
             <div>
@@ -996,16 +996,23 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
   const dayOffset = daysSinceLastClass(cls);
   const hw = filterHomeworkByDay(cls['숙제범위'], dayOffset, lastClassDate(cls));
 
+  // 반 섹션 안 큰 버튼 공통 스타일 (폰트 키우기 피드백 반영)
+  const bigChip = (bg, color) => ({
+    background: bg, color, border: 'none', cursor: 'pointer',
+    fontSize: 15, fontWeight: 700, padding: '12px 16px', borderRadius: 12,
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+  });
+
   return (
     <div style={{ border: '2px solid var(--border)', borderRadius: 14, padding: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span className="tag">{cls['대분류'] || '수업'}</span>
-        <span style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 15 }}>{cls['반이름']}</span>
+        <span className="tag" style={{ fontSize: 13, padding: '4px 11px' }}>{cls['대분류'] || '수업'}</span>
+        <span style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 18 }}>{cls['반이름']}</span>
       </div>
-      {cls['진도'] && <div style={{ fontSize: 12, color: 'var(--med)', marginBottom: 10 }}>{cls['진도']}</div>}
+      {cls['진도'] && <div style={{ fontSize: 14, color: 'var(--med)', marginBottom: 10 }}>{cls['진도']}</div>}
 
       {hw.visible.length === 0 && hw.locked.length === 0 && (
-        <div style={{ fontSize: 13, color: 'var(--light)', marginBottom: 6 }}>오늘 확인할 숙제가 없어요.</div>
+        <div style={{ fontSize: 15, color: 'var(--light)', marginBottom: 6 }}>오늘 확인할 숙제가 없어요.</div>
       )}
 
       {hw.visible.map((item, i) => (
@@ -1015,10 +1022,10 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
       {hw.locked.length > 0 && (
         <div style={{ marginTop: 4 }}>
           {hw.locked.map((l, i) => (
-            <div key={i} className="locked-item" style={{ padding: '6px 0' }}>
+            <div key={i} className="locked-item" style={{ padding: '6px 0', fontSize: 15 }}>
               <span>🔒</span>
               <span>{l.title}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 12 }}>
+              <span style={{ marginLeft: 'auto', fontSize: 13 }}>
                 {l.opensWeekday ? `${l.opensWeekday}요일에 열려요` : `${l.opensAt}일 뒤 열림`}
               </span>
             </div>
@@ -1026,24 +1033,24 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
         {cls['클래스카드URL'] && (
-          <a href={cls['클래스카드URL']} target="_blank" rel="noopener noreferrer" className="tag" style={{ background: 'var(--soft-teal)', color: 'var(--teal)' }}>
+          <a href={cls['클래스카드URL']} target="_blank" rel="noopener noreferrer" style={bigChip('var(--soft-teal)', 'var(--teal)')}>
             📚 단어 공부
           </a>
         )}
         {cls['개념설명숙제'] && (
-          <button onClick={() => onOpenConcept(cls)} className="tag" style={{ background: '#f3e8ff', color: 'var(--purple)', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => onOpenConcept(cls)} style={bigChip('#f3e8ff', 'var(--purple)')}>
             🗣️ 개념 설명하기
           </button>
         )}
         {cls['시크릿코드'] && cls.status === '진행중' && (
-          <button onClick={() => onOpenCode(cls)} className="tag" style={{ background: '#f3e8ff', color: 'var(--purple)', border: 'none', cursor: 'pointer' }}>
+          <button onClick={() => onOpenCode(cls)} style={bigChip('#f3e8ff', 'var(--purple)')}>
             🔑 시크릿코드
           </button>
         )}
         {cls['필기인증링크'] && (
-          <a href={cls['필기인증링크']} target="_blank" rel="noopener noreferrer" className="tag" style={{ background: '#ffe4ec', color: 'var(--pink)' }}>
+          <a href={cls['필기인증링크']} target="_blank" rel="noopener noreferrer" style={bigChip('#ffe4ec', '#d6336c')}>
             📸 필기 인증샷
           </a>
         )}

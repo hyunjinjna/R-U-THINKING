@@ -23,6 +23,7 @@ export default function ClassesPage() {
   const [cancelAll, setCancelAll] = useState(false);
   const [cancelMsg, setCancelMsg] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [overdue, setOverdue] = useState({}); // 반이름 -> 숙제 X 학생 수
 
   const submitCancel = async () => {
     const dates = cancelDates.filter(Boolean);
@@ -61,6 +62,11 @@ export default function ClassesPage() {
         setError('데이터를 불러오지 못했습니다.');
         setLoading(false);
       });
+    // 반별 숙제 미완료(최근 기록 X) 학생 수 — 배지용
+    fetch('/api/overdue-summary')
+      .then((r) => r.json())
+      .then((j) => setOverdue(j.counts || {}))
+      .catch(() => {});
   }, []);
 
   const sheetLink = process.env.NEXT_PUBLIC_CLASSES_SHEET_LINK || '';
@@ -270,7 +276,15 @@ export default function ClassesPage() {
     byCategory[cat].push(c);
   });
 
-  const renderCard = (c, i) => (
+  const overdueOf = (className) => {
+    const norm = (s) => String(s || '').toLowerCase().replace(/\s+/g, '');
+    const key = Object.keys(overdue).find((k) => norm(k) === norm(className));
+    return key ? overdue[key] : 0;
+  };
+
+  const renderCard = (c, i) => {
+    const od = overdueOf(c['반이름']);
+    return (
     <button key={i} className="card" onClick={() => setSelected(c)}>
       <div
         className="card-icon"
@@ -282,7 +296,14 @@ export default function ClassesPage() {
         {c.status === '진행중' ? c.sessions : '·'}
       </div>
       <div>
-        <div className="card-title">{c['반이름']}</div>
+        <div className="card-title">
+          {c['반이름']}
+          {od > 0 && (
+            <span style={{ marginLeft: 8, background: 'var(--red)', color: '#fff', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 10, verticalAlign: 'middle' }}>
+              숙제 밀림 {od}명
+            </span>
+          )}
+        </div>
         <div className="card-desc">
           {c['수업요일']} {c['수업시간']} ·{' '}
           {c.status === '진행중'
@@ -292,7 +313,8 @@ export default function ClassesPage() {
       </div>
       <div className="card-arrow">→</div>
     </button>
-  );
+    );
+  };
 
   return (
     <main className="container">
