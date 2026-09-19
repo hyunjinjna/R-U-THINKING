@@ -918,19 +918,7 @@ function HomeScreen({
         </>
       )}
 
-      {pointsLink && (
-        <>
-          <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>포인트</div>
-          <a href={pointsLink} target="_blank" rel="noopener noreferrer" className="card">
-            <div className="card-icon" style={{ background: 'var(--red)' }}>⭐</div>
-            <div>
-              <div className="card-title">내 포인트 보기</div>
-              <div className="card-desc">모은 포인트 확인하기</div>
-            </div>
-            <div className="card-arrow">→</div>
-          </a>
-        </>
-      )}
+      <PointsCard profile={profile} />
 
       {kakaoLink && (
         <>
@@ -1094,7 +1082,7 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
       {cls['주말리뷰'] && cls['주말리뷰'].length > 0 && (
         <>
           <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--teal)', margin: '2px 0 4px' }}>
-            🎉 주말 리뷰 — 이번 주 배운 것 복습해요!
+            🎉 주말 숙제 — 이번 주 배운 것 복습해요!
           </div>
           {cls['주말리뷰'].map((item) => {
             const wk = `${cls['반이름']}|주말${cls['주말리뷰키'] || ''}|${item.title}`;
@@ -1103,6 +1091,15 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
         </>
       )}
 
+      {hw.visible.length > 0 && (() => {
+        const d = lastClassDate(cls);
+        const label = d ? `${d.getMonth() + 1}/${d.getDate()} (${['일','월','화','수','목','금','토'][d.getDay()]}) 수업 숙제` : '수업 숙제';
+        return (
+          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', margin: '6px 0 4px' }}>
+            📚 {label}
+          </div>
+        );
+      })()}
       {hw.visible.map((item, i) => (
         <HomeworkLine key={keyFor(item.title)} item={item} checkKey={keyFor(item.title)} />
       ))}
@@ -1329,5 +1326,106 @@ function ConceptMode({ classData, onBack }) {
         </button>
       </div>
     </main>
+  );
+}
+
+
+// ===== 26번 자동 포인트 카드 + 마켓 =====
+function PointsCard({ profile }) {
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [requesting, setRequesting] = useState(false);
+
+  const load = () => {
+    if (!profile || !profile.이름) return;
+    fetch(`/api/points?name=${encodeURIComponent(profile.이름)}&phone=${encodeURIComponent(profile.전화 || '')}`)
+      .then((r) => r.json())
+      .then((j) => { if (!j.error) setData(j); })
+      .catch(() => {});
+  };
+  useEffect(load, [profile]);
+
+  if (!data) return null;
+
+  const request = async (item) => {
+    setRequesting(true);
+    setMsg('');
+    try {
+      const res = await fetch('/api/points', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: profile.이름, phone: profile.전화, 상품: item['상품'], 가격: item['가격'] }),
+      });
+      const j = await res.json();
+      if (j.error) setMsg(j.error);
+      else { setMsg('신청 완료! 선생님이 확인하면 받을 수 있어요 🎉'); load(); }
+    } catch (e) { setMsg('신청에 실패했어요. 다시 해볼까?'); }
+    setRequesting(false);
+  };
+
+  const usable = data.총포인트 - data.신청중;
+
+  return (
+    <>
+      <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>⭐ 내 포인트</div>
+      <button className="card" onClick={() => { setOpen(true); setMsg(''); }}>
+        <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>⭐</div>
+        <div style={{ flex: 1 }}>
+          <div className="card-title">{data.총포인트}P</div>
+          <div className="card-desc">이번 주 +{data.이번주}P{data.신청중 > 0 ? ` · 교환 신청 중 ${data.신청중}P` : ''} · 마켓 구경하기</div>
+        </div>
+        <div className="card-arrow">→</div>
+      </button>
+
+      {open && (
+        <div className="modal-backdrop" onClick={() => setOpen(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '80vh', overflowY: 'auto' }}>
+            <button className="modal-close" onClick={() => setOpen(false)}>✕</button>
+            <h2 style={{ marginTop: 0 }}>🎁 포인트 마켓</h2>
+            <p style={{ fontSize: 14, color: 'var(--med)', marginTop: -6 }}>
+              쓸 수 있는 포인트: <b>{usable}P</b>
+            </p>
+
+            {msg && <div className="notice" style={{ marginBottom: 10 }}>{msg}</div>}
+
+            {(data.상품목록 || []).length === 0 ? (
+              <div className="empty">아직 준비된 상품이 없어요. 조금만 기다려줘!</div>
+            ) : (
+              (data.상품목록 || []).map((item, i) => {
+                const price = parseInt(String(item['가격'] || ''), 10) || 0;
+                const can = usable >= price;
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800 }}>{item['상품']}</div>
+                      <div style={{ fontSize: 13, color: 'var(--light)' }}>{price}P</div>
+                    </div>
+                    <button
+                      className="btn"
+                      style={{ width: 'auto', padding: '8px 14px', fontSize: 13, opacity: can ? 1 : 0.4 }}
+                      disabled={!can || requesting}
+                      onClick={() => request(item)}
+                    >
+                      교환 신청
+                    </button>
+                  </div>
+                );
+              })
+            )}
+
+            {(data.내신청 || []).length > 0 && (
+              <>
+                <div style={{ fontWeight: 800, fontSize: 14, marginTop: 16, color: 'var(--navy)' }}>내 신청</div>
+                {(data.내신청 || []).slice(0, 5).map((x, i) => (
+                  <div key={i} style={{ fontSize: 13, color: 'var(--med)', padding: '4px 0' }}>
+                    {x.상품} ({x.가격}P) — {x.상태}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }

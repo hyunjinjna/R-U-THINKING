@@ -10,3 +10,5 @@ await import('/tmp/rt/tests/dashboard.test.mjs');
 await import('/tmp/rt/tests/week.test.mjs');
 await import('/tmp/rt/tests/curriculum.test.mjs');
 await import('/tmp/rt/tests/notice.test.mjs');
+await import('/tmp/rt/tests/weekend.test.mjs');
+await import('/tmp/rt/tests/points.test.mjs');

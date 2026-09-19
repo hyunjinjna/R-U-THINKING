@@ -20,6 +20,7 @@ const MENU = {
       { href: '/teacher/answer', icon: '💬', color: 'var(--pink)', title: '질문 답변 도우미', desc: '학부모 문의 답변 초안 작성' },
       { href: '/teacher/leveltest', icon: '📋', color: 'var(--yellow)', title: '레벨테스트 결과함', desc: '진단 리포트 확인 후 카톡 발송' },
       { href: '/teacher/enrollments', icon: '📝', color: 'var(--navy)', title: '등록·대기 신청', desc: '신규 등록 처리, 반 배정, 대기자 확인' },
+      { href: '/teacher/points', icon: '🎁', color: 'var(--yellow)', title: '포인트 교환 신청', desc: '아이들 상품 교환 처리' },
     ],
   },
 };
