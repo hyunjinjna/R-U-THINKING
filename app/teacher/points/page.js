@@ -46,6 +46,12 @@ export default function PointsAdminPage() {
                   <div style={{ flex: 1 }}>
                     <div className="card-title">{x['이름']} — {x['상품']}</div>
                     <div className="card-desc">{x['가격']}P · {x['시각']}</div>
+                    <div className="card-desc" style={{ marginTop: 4 }}>
+                      {x['반들'] ? `🏫 ${x['반들']}` : ''}
+                    </div>
+                    <div className="card-desc" style={{ color: x['집주소'] === '미입력' ? 'var(--red)' : 'var(--med)' }}>
+                      📦 {x['집주소']}
+                    </div>
                   </div>
                   <button className="btn" style={{ width: 'auto', padding: '8px 14px', fontSize: 13, flexShrink: 0 }}
                     onClick={() => complete(x)} disabled={saving === x._row}>

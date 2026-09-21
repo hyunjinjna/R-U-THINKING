@@ -48,6 +48,68 @@ const BOOK_CATEGORIES = {
   },
 };
 
+
+// 문제은행 음성·이미지 지원 — 음성 칸에 텍스트가 있으면 브라우저 TTS로 읽고(파일 불필요),
+// http 주소면 그 파일을 재생. 문항이 바뀌면 자동으로 한 번 들려주고 🔊 버튼으로 다시 듣기.
+function speakText(text) {
+  try {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    u.rate = 0.8;
+    window.speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+function QuestionMedia({ q }) {
+  const audio = String(q['음성파일'] || q['음성'] || '').trim();
+  const image = String(q['이미지파일'] || q['이미지'] || '').trim();
+  const isUrl = audio.startsWith('http');
+  const audioRef = useRef(null);
+
+  const play = () => {
+    if (!audio) return;
+    if (isUrl) {
+      try {
+        if (!audioRef.current) audioRef.current = new Audio(audio);
+        audioRef.current.currentTime = 0;
+        audioRef.current.play();
+      } catch (e) {}
+    } else {
+      speakText(audio);
+    }
+  };
+
+  useEffect(() => {
+    audioRef.current = null;
+    if (audio) {
+      const t = setTimeout(play, 400); // 화면 뜨고 살짝 뒤에 자동 재생
+      return () => { clearTimeout(t); try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} };
+    }
+  }, [q['문제ID']]);
+
+  if (!audio && !image) return null;
+  return (
+    <div style={{ marginBottom: 24 }}>
+      {image && image.startsWith('http') && (
+        <img src={image} alt="" style={{ maxWidth: '100%', borderRadius: 12, marginBottom: 14 }} />
+      )}
+      {audio && (
+        <button
+          onClick={play}
+          style={{
+            width: '100%', padding: '22px 0', borderRadius: 16, border: 'none', cursor: 'pointer',
+            background: 'var(--navy)', color: '#fff', fontSize: 20, fontWeight: 800,
+          }}
+        >
+          🔊 소리 다시 듣기
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function LevelTestPage() {
   const [stage, setStage] = useState('intro');
   const [entryType, setEntryType] = useState(null);
@@ -398,9 +460,10 @@ export default function LevelTestPage() {
         <div style={{ textAlign: 'right', fontWeight: 800, color: timer <= 10 ? 'var(--red)' : 'var(--navy)', fontSize: 22, marginBottom: 24 }}>
           {timer}초
         </div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--navy)', marginBottom: 32, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--navy)', marginBottom: 20, lineHeight: 1.6 }}>
           {q['질문']}
         </div>
+        <QuestionMedia q={q} />
         <div className="card-list">
           {[1, 2, 3, 4].map((n) => (
             <button key={n} className="card" onClick={() => answerPhonics(Number(q['정답번호']) === n)}>
@@ -425,9 +488,10 @@ export default function LevelTestPage() {
             {q['지문']}
           </div>
         )}
-        <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--navy)', marginBottom: 28, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--navy)', marginBottom: 20, lineHeight: 1.6 }}>
           {q['질문'] || q['문장']}
         </div>
+        <QuestionMedia q={q} />
         <div className="card-list">
           {[1, 2, 3, 4].map((n) => (
             <button key={n} className="card" onClick={() => answerAdaptive(n)}>

@@ -1386,6 +1386,24 @@ function PointsCard({ profile }) {
               쓸 수 있는 포인트: <b>{usable}P</b>
             </p>
 
+            {(data.이번주내역 || []).length > 0 && (
+              <div style={{ background: 'var(--card)', borderRadius: 12, padding: '12px 14px', marginBottom: 14 }}>
+                <div style={{ fontWeight: 800, fontSize: 14, color: 'var(--navy)', marginBottom: 8 }}>
+                  ⭐ 이번 주 +{data.이번주}P — 이렇게 모았어요!
+                </div>
+                {(data.이번주내역 || []).map((x, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, padding: '3px 0' }}>
+                    <span style={{ color: x.kind === 'plus' ? 'var(--dark)' : x.kind === 'minus' ? 'var(--red)' : 'var(--light)' }}>
+                      {x.label} {x.count}번
+                    </span>
+                    <span style={{ fontWeight: 800, color: x.kind === 'plus' ? 'var(--teal)' : x.kind === 'minus' ? 'var(--red)' : 'var(--light)' }}>
+                      {x.kind === 'missed' ? `${x.points}P를 놓쳤어요` : `${x.points > 0 ? '+' : ''}${x.points}P`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {msg && <div className="notice" style={{ marginBottom: 10 }}>{msg}</div>}
 
             {(data.상품목록 || []).length === 0 ? (

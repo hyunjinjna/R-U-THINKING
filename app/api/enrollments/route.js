@@ -21,6 +21,33 @@ function splitItems(r) {
   return items;
 }
 
+
+// 응답 시트에서 집주소 칸 찾기 (문항 제목이 조금 달라도 "주소"가 들어간 칸을 찾음)
+function addressOf(enrollment) {
+  for (const key of Object.keys(enrollment || {})) {
+    if (String(key).includes('주소')) {
+      const v = String(enrollment[key] || '').trim();
+      if (v) return v;
+    }
+  }
+  return '';
+}
+
+
+// 대기 건 상태 인코딩 (처리여부 칸 하나로 관리)
+// '' = 신규 / "연락함 시각" / "결제대기|반이름|시각" → 아직 진행 중이므로 미처리 목록에 남김
+// "연락마침 시각" / "등록전환|반이름|시각" / "처리완료 시각" → 처리완료 보기로
+export function waitStatusOf(value) {
+  const v = String(value || '').trim();
+  if (!v) return { key: 'new', label: '' };
+  if (v.startsWith('연락함')) return { key: 'contacted', label: '📞 연락함' };
+  if (v.startsWith('결제대기')) {
+    const parts = v.split('|');
+    return { key: 'pending_pay', label: '💳 결제 대기', 반: (parts[1] || '').trim() };
+  }
+  return { key: 'closed', label: v.startsWith('등록전환') ? '등록 전환' : '처리 완료' };
+}
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const wantDone = searchParams.get('done') === '1';
@@ -39,7 +66,8 @@ export async function GET(request) {
   }
 
   const filtered = [...rows].filter((r) => {
-    const done = !!String(r['처리여부'] || '').trim();
+    const st = waitStatusOf(r['처리여부']);
+    const done = st.key === 'closed';
     return wantDone ? done : !done;
   });
   // 대기 목록은 오래된순(먼저 온 것부터 처리), 처리완료 목록은 최신순
@@ -98,6 +126,11 @@ async function buildNoticeFor(name, 반이름들, 계정) {
 
 /** 등록 신청 시트에 처리여부 자동 기록 (탭 이름은 ENROLLMENTS_SHEET_TAB, 기본 "설문지 응답 시트1") */
 async function markDone(enrollment) {
+  return markDoneWith(enrollment, '처리완료 ' + koreaTimeString());
+}
+
+/** 처리여부 칸에 지정한 값을 기록 (대기 상태 머신: 연락함/결제대기/연락마침/등록전환) */
+async function markDoneWith(enrollment, value) {
   const sheetId = extractSheetId(process.env.NEXT_PUBLIC_ENROLLMENTS_SHEET_LINK || '');
   if (!sheetId) return { ok: false, error: 'NEXT_PUBLIC_ENROLLMENTS_SHEET_LINK가 없어 처리여부를 자동 기록 못 했습니다.' };
 
@@ -110,7 +143,7 @@ async function markDone(enrollment) {
       sameName(r['학생 이름'], enrollment['학생 이름'])
     );
     if (!row) return { ok: false, error: '등록 시트에서 해당 신청을 찾지 못해 처리여부를 기록 못 했습니다.' };
-    return await updateCell(sheetId, tab, row._row, '처리여부', '처리완료 ' + koreaTimeString());
+    return await updateCell(sheetId, tab, row._row, '처리여부', value);
   }
   return { ok: false, error: '등록 시트 탭을 찾지 못했습니다. 환경변수 ENROLLMENTS_SHEET_TAB에 탭 이름을 넣어주세요.' };
 }
@@ -142,15 +175,30 @@ export async function POST(request) {
     return Response.json({ ok: true, 안내문, 계정, warnings: missing.map((m) => `"${m}" 반을 운영시트에서 못 찾았습니다.`) });
   }
 
+  // ===== 대기: 연락함 기록 (수업 열렸어요 문구 복사 시) =====
+  if (body.mode === 'waitcontact') {
+    const r = await markDoneWith(body.enrollment, '연락함 ' + koreaTimeString());
+    return Response.json(r);
+  }
+
+  // ===== 대기: 반 배정 → 결제 대기 (아직 학생명단에 안 넣음) =====
+  if (body.mode === 'waitassign') {
+    const 반 = String(body.반이름 || '').trim();
+    if (!반) return Response.json({ error: '배정할 반을 선택해주세요.' });
+    const r = await markDoneWith(body.enrollment, `결제대기|${반}|` + koreaTimeString());
+    return Response.json(r);
+  }
+
   // ===== 대기 처리완료 (처리여부만 기록) =====
   if (body.mode === 'waitdone') {
     if (!body.enrollment) return Response.json({ error: '신청 정보가 없습니다.' });
-    const done = await markDone(body.enrollment);
+    const done = await markDoneWith(body.enrollment, '연락마침 ' + koreaTimeString());
     if (!done.ok) return Response.json({ error: done.error || '처리여부 기록에 실패했습니다.' });
     return Response.json({ ok: true });
   }
 
-  // ===== 처리완료 =====
+  // ===== 처리완료 (일반 등록) / 결제 완료(대기 전환, mode:'waitpaid') =====
+  // waitpaid: 대기 건이 결제 대기 상태에서 입금 확인됐을 때 — 이 시점에만 학생명단 추가·계정·안내문 실행
   const { enrollment, assignments } = body;
   // assignments: [{ 과목, 레벨, 희망시간, 배정반 }]
 
@@ -179,7 +227,7 @@ export async function POST(request) {
   });
   const 계정 = { 아이디: acc.아이디, 비번: acc.비번 };
 
-  // 학생명단에 추가 (반마다 한 줄, A~G: 이름|반이름|학부모 연락처|학생 학년|등록시각|클래스카드아이디|클래스카드비번)
+  // 학생명단에 추가 (반마다 한 줄, A~H: 이름|반이름|학부모 연락처|학생 학년|등록시각|클래스카드아이디|클래스카드비번|집주소)
   for (const a of assignments) {
     const row = [
       enrollment['학생 이름'] || '',
@@ -189,13 +237,16 @@ export async function POST(request) {
       koreaTimeString(),
       계정.아이디,
       계정.비번,
+      addressOf(enrollment),
     ];
     const r = await appendRow(studentsSheetId, studentsTab.tab || '학생명단', row);
     results.push({ 대상: `학생명단 (${a.배정반})`, ok: r.ok, error: r.error });
   }
 
-  // 등록 신청 시트에 처리여부 자동 기록
-  const done = await markDone(enrollment);
+  // 등록 신청 시트에 처리여부 자동 기록 (대기 전환 건은 "등록전환"으로 구분 — 24번 전환율용)
+  const done = body.mode === 'waitpaid'
+    ? await markDoneWith(enrollment, `등록전환|${assignments.map((a) => a.배정반).join(',')}|` + koreaTimeString())
+    : await markDone(enrollment);
   if (!done.ok && done.error) warnings.push(done.error);
 
   // 안내문 생성

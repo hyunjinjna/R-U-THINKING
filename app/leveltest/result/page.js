@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { gapDescription } from '../../../lib/gapDescriptions';
 
 function ResultContent() {
   const params = useSearchParams();
@@ -157,22 +158,34 @@ function ResultContent() {
                     <div style={{ fontSize: 13, color: 'var(--med)', marginBottom: 6, fontWeight: 700 }}>
                       보완이 필요한 부분
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                      {String(a.구멍).split(',').map((g, j) => (
-                        <span
-                          key={j}
-                          style={{
-                            background: 'var(--soft-red)',
-                            color: 'var(--red)',
-                            padding: '5px 12px',
-                            borderRadius: 999,
-                            fontSize: 13,
-                            fontWeight: 700,
-                          }}
-                        >
-                          {g.trim()}
-                        </span>
-                      ))}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {String(a.구멍).split(',').map((g, j) => {
+                        // 설명 버전은 전화번호+태그 시드로 고정 — 같은 리포트는 새로고침해도 같은 문장, 학생마다는 다양
+                        const raw = g.trim();
+                        const seed = (phone + raw).split('').reduce((s, ch) => s + ch.charCodeAt(0), 0);
+                        const desc = gapDescription(raw, seed);
+                        return (
+                          <div key={j}>
+                            <span
+                              style={{
+                                background: 'var(--soft-red)',
+                                color: 'var(--red)',
+                                padding: '5px 12px',
+                                borderRadius: 999,
+                                fontSize: 13,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {raw}
+                            </span>
+                            {desc && (
+                              <div style={{ fontSize: 13.5, color: 'var(--med)', marginTop: 5, paddingLeft: 4, lineHeight: 1.6 }}>
+                                {desc}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

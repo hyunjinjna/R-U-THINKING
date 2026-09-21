@@ -1,7 +1,7 @@
 // 코치용: 포인트 교환 신청 목록 + 지급 완료 처리
-import { dashboardSheetId } from '../../../lib/dashboardData';
+import { dashboardSheetId, loadStudents } from '../../../lib/dashboardData';
 import { readTab, updateCell } from '../../../lib/sheetsWrite';
-import { koreaTimeString } from '../../../lib/utils';
+import { koreaTimeString, sameName, splitMulti } from '../../../lib/utils';
 
 export const dynamic = 'force-dynamic';
 const EXCHANGE_TAB = '포인트교환';
@@ -13,8 +13,18 @@ export async function GET() {
   if (!r.ok) return Response.json({ error: r.error, pending: [], done: [] });
   if (r.missing) return Response.json({ pending: [], done: [], warning: '통합 대시보드 시트에 "포인트교환" 탭이 아직 없어요. 탭 이름만 만들어두면 됩니다 (헤더: 시각|이름|상품|가격|지급여부).' });
   const rows = r.rows || [];
-  const pending = rows.filter((x) => !String(x['지급여부'] || '').trim());
-  const done = rows.filter((x) => String(x['지급여부'] || '').trim()).reverse().slice(0, 30);
+
+  // 학생명단 대조: 배송용으로 반·집주소를 붙여서 내려줌 (기록에 저장하지 않고 항상 최신 조회)
+  let students = [];
+  try { students = await loadStudents(); } catch (e) {}
+  const enrich = (x) => {
+    const mine = students.filter((s) => sameName(s['이름'], x['이름']));
+    const 반들 = [...new Set(mine.flatMap((s) => splitMulti(s['반이름'])))];
+    const 주소 = (mine.map((s) => String(s['집주소'] || '').trim()).find(Boolean)) || '';
+    return { ...x, 반들: 반들.join(', '), 집주소: 주소 || '미입력' };
+  };
+  const pending = rows.filter((x) => !String(x['지급여부'] || '').trim()).map(enrich);
+  const done = rows.filter((x) => String(x['지급여부'] || '').trim()).reverse().slice(0, 30).map(enrich);
   return Response.json({ pending, done });
 }
 

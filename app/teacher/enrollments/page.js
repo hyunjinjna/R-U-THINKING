@@ -115,6 +115,98 @@ export default function EnrollmentsPage() {
     setSaving(false);
   };
 
+  // 대기 건 상태 (처리여부 인코딩: '' 신규 / 연락함 / 결제대기|반|시각)
+  const waitStatus = (row) => {
+    const v = String((row && row['처리여부']) || '').trim();
+    if (!v) return { key: 'new' };
+    if (v.startsWith('연락함')) return { key: 'contacted' };
+    if (v.startsWith('결제대기')) return { key: 'pending_pay', 반: (v.split('|')[1] || '').trim() };
+    return { key: 'closed' };
+  };
+
+  // "수업 열렸어요" 연락 문구 (알리고 키 오면 자동 발송으로 교체 예정 — 지금은 복사해서 문자·카톡)
+  const buildOpenMessage = (row) => {
+    const it = (row.items && row.items[0]) || {};
+    return [
+      `${row['학부모 이름'] || ''} 학부모님, 안녕하세요! R U Thinking? 영어학원입니다 😊`,
+      ``,
+      `기다려주신 ${it.과목 || ''} ${it.레벨 || ''} 수업(${it.희망시간 || ''})이 열리게 되어 연락드립니다.`,
+      `${row['학생 이름'] || ''} 학생이 함께할 수 있어요!`,
+      ``,
+      `등록을 원하시면 이 번호로 답장 주세요. 수업 안내와 결제 방법을 알려드리겠습니다.`,
+      `궁금하신 점도 편하게 문의해주세요. 감사합니다!`,
+    ].join('\n');
+  };
+
+  const postWaitMode = async (mode, extra = {}) => {
+    if (!selected) return;
+    setSaving(true);
+    setMessage('');
+    try {
+      const res = await fetch('/api/enrollments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, enrollment: selected, ...extra }),
+      });
+      const json = await res.json();
+      if (json.error) { setMessage(json.error); setSaving(false); return null; }
+      setSaving(false);
+      return json;
+    } catch (err) { setMessage('처리 실패: ' + err.message); setSaving(false); return null; }
+  };
+
+  // ① 연락 문구 복사 + 연락함 기록
+  const handleWaitContact = async () => {
+    try { await navigator.clipboard.writeText(buildOpenMessage(selected)); } catch (e) {}
+    const r = await postWaitMode('waitcontact');
+    if (r) {
+      const updated = { ...selected, 처리여부: '연락함' };
+      setSelected(updated);
+      setEnrollments((prev) => prev.map((e) => (e === selected ? updated : e)));
+      setMessage('연락 문구가 복사되었습니다. 문자나 카톡에 붙여넣어 보내주세요!');
+    }
+  };
+
+  // ② 반 배정 → 결제 대기 (아직 학생명단에 안 넣음)
+  const handleWaitAssign = async () => {
+    const 반 = assignments[0] || '';
+    if (!반) { setMessage('배정할 반을 선택해주세요.'); return; }
+    const r = await postWaitMode('waitassign', { 반이름: 반 });
+    if (r) {
+      const updated = { ...selected, 처리여부: `결제대기|${반}|` };
+      setSelected(updated);
+      setEnrollments((prev) => prev.map((e) => (e === selected ? updated : e)));
+      setMessage('결제 대기로 표시했습니다. 입금 확인 후 [결제 완료]를 눌러주세요.');
+    }
+  };
+
+  // ③ 결제 완료 → 이 순간에만 학생명단 추가·계정·안내문 (일반 등록의 처리완료와 동일 파이프라인)
+  const handleWaitPaid = async () => {
+    const st = waitStatus(selected);
+    const 반 = st.반 || assignments[0] || '';
+    if (!반) { setMessage('배정된 반이 없습니다. 먼저 반을 배정해주세요.'); return; }
+    setSaving(true);
+    setMessage('');
+    try {
+      const it = (selected.items && selected.items[0]) || {};
+      const res = await fetch('/api/enrollments', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'waitpaid',
+          enrollment: selected,
+          assignments: [{ 과목: it.과목 || '', 레벨: it.레벨 || '', 희망시간: it.희망시간 || '', 배정반: 반 }],
+        }),
+      });
+      const json = await res.json();
+      if (json.error) setMessage(json.error);
+      else if (json.ok) {
+        setNotice({ 안내문: json.안내문, 계정: json.계정, warnings: json.warnings || [] });
+        setCopied(false);
+        setEnrollments((prev) => prev.filter((e) => e !== selected));
+      } else setMessage('일부 처리에 실패했습니다: ' + JSON.stringify(json.results));
+    } catch (err) { setMessage('처리 실패: ' + err.message); }
+    setSaving(false);
+  };
+
   // 대기 신청 처리완료: 처리여부만 기록 (학생명단 추가·안내문 없음)
   const handleWaitDone = async () => {
     if (!selected) return;
@@ -214,11 +306,15 @@ export default function EnrollmentsPage() {
           {selected['학생 학년']} · 학부모 {selected['학부모 이름']} ({selected['학부모 연락처']})
         </p>
 
-        {isWait && (
-          <div className="notice" style={{ marginBottom: 14 }}>
-            대기 신청입니다. 이 시간대에 반이 열리면 연락하기로 한 건이에요. 연락(또는 등록 전환)을 마쳤으면 아래 [처리완료]를 눌러주세요 — 대기 카운트에서 빠집니다.
-          </div>
-        )}
+        {isWait && (() => {
+          const st = waitStatus(selected);
+          const text = st.key === 'pending_pay'
+            ? `💳 결제 대기 중입니다 (배정: ${st.반}). 입금이 확인되면 [결제 완료]를 눌러주세요 — 그때 학생명단 추가·계정·안내문이 만들어집니다.`
+            : st.key === 'contacted'
+              ? '📞 연락을 보낸 건입니다. 학부모가 등록을 원하면 아래에서 반을 배정해 결제 대기로 넘겨주세요.'
+              : '대기 신청입니다. 이 시간대에 반이 열렸으면 [수업 열렸어요 문구 복사]로 연락부터 시작하세요.';
+          return <div className="notice" style={{ marginBottom: 14 }}>{text}</div>;
+        })()}
 
         <div className="section-label">신청 내역</div>
 
@@ -247,7 +343,7 @@ export default function EnrollmentsPage() {
                   </span>
                 </div>
 
-                {!isWait && (<>
+                {(!isWait || waitStatus(selected).key !== 'pending_pay') && (<>
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--med)', marginBottom: 8 }}>
                   배정할 반
                 </div>
@@ -285,6 +381,7 @@ export default function EnrollmentsPage() {
 
         <div className="section-label">추가 정보</div>
         <div className="result-box" style={{ fontSize: 14, lineHeight: 2 }}>
+          집주소: {(Object.keys(selected).find((k) => k.includes('주소')) && selected[Object.keys(selected).find((k) => k.includes('주소'))]) || '-'}{'\n'}
           영어 학습 경력: {selected['학생 영어 학습 경력'] || '-'}{'\n'}
           알게 된 경로: {selected['알게 된 경로'] || '-'}{'\n'}
           결제 방법: {selected['결제 방법'] || '-'}
@@ -296,9 +393,40 @@ export default function EnrollmentsPage() {
           </div>
         )}
 
-        <button className="btn" style={{ marginTop: 16 }} onClick={isWait ? handleWaitDone : handleComplete} disabled={saving}>
-          {saving ? '처리 중...' : isWait ? '처리완료 (연락 마침 — 대기에서 제외)' : '처리완료 (학생명단 추가 + 안내문 생성)'}
-        </button>
+        {!isWait ? (
+          <button className="btn" style={{ marginTop: 16 }} onClick={handleComplete} disabled={saving}>
+            {saving ? '처리 중...' : '처리완료 (학생명단 추가 + 안내문 생성)'}
+          </button>
+        ) : (() => {
+          const st = waitStatus(selected);
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 16 }}>
+              {st.key === 'new' && (
+                <button className="btn" onClick={handleWaitContact} disabled={saving}>
+                  {saving ? '처리 중...' : '📩 수업 열렸어요 문구 복사 (연락 시작)'}
+                </button>
+              )}
+              {st.key !== 'pending_pay' && (
+                <button className="btn" style={{ background: 'var(--teal)' }} onClick={handleWaitAssign} disabled={saving}>
+                  {saving ? '처리 중...' : '🎓 선택한 반으로 배정 (결제 대기로)'}
+                </button>
+              )}
+              {st.key === 'pending_pay' && (
+                <button className="btn" onClick={handleWaitPaid} disabled={saving}>
+                  {saving ? '처리 중...' : '💳 결제 완료 — 등록 확정 (학생명단 추가 + 안내문)'}
+                </button>
+              )}
+              <button
+                className="btn"
+                style={{ background: '#fff', color: 'var(--med)', border: '2px solid var(--border)' }}
+                onClick={handleWaitDone}
+                disabled={saving}
+              >
+                연락 마침 — 대기 종료 (등록 안 함)
+              </button>
+            </div>
+          );
+        })()}
 
         {noticeModal}
       </main>
@@ -350,7 +478,15 @@ export default function EnrollmentsPage() {
             <button key={i} className="card" onClick={() => { setSelected(e); setAssignments({}); }}>
               <div className="card-icon" style={{ background: 'var(--navy)', fontSize: 16 }}>📝</div>
               <div style={{ flex: 1 }}>
-                <div className="card-title">{e['학생 이름']} ({e['학생 학년']})</div>
+                <div className="card-title">
+                  {e['학생 이름']} ({e['학생 학년']})
+                  {kindTab === '대기' && waitStatus(e).key === 'contacted' && (
+                    <span style={{ marginLeft: 8, fontSize: 12, background: 'var(--card)', color: 'var(--med)', padding: '3px 8px', borderRadius: 8, fontWeight: 700 }}>📞 연락함</span>
+                  )}
+                  {kindTab === '대기' && waitStatus(e).key === 'pending_pay' && (
+                    <span style={{ marginLeft: 8, fontSize: 12, background: '#fff3cd', color: '#b8860b', padding: '3px 8px', borderRadius: 8, fontWeight: 700 }}>💳 결제 대기</span>
+                  )}
+                </div>
                 <div className="card-desc">
                   {e.items.map((it) => it.레벨).filter(Boolean).join(', ')}
                 </div>

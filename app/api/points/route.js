@@ -5,7 +5,7 @@
 import { loadStudents, dashboardSheetId } from '../../../lib/dashboardData';
 import { readTab, appendRow } from '../../../lib/sheetsWrite';
 import { DASHBOARD_TAB } from '../../../lib/dashboard';
-import { mergePointRules, computePoints } from '../../../lib/points';
+import { mergePointRules, computePoints, weeklyBreakdown } from '../../../lib/points';
 import { sameName, splitMulti, koreaTimeString } from '../../../lib/utils';
 import { IS_DEMO } from '../../../lib/config';
 
@@ -61,13 +61,15 @@ export async function GET(request) {
     exchanges = (ex.rows || []).filter((r) => sameName(r['이름'], name));
   }
 
-  const points = computePoints(records, exchanges, mergePointRules(ruleRows));
+  const rules = mergePointRules(ruleRows);
+  const points = computePoints(records, exchanges, rules);
+  const 이번주내역 = weeklyBreakdown(records, rules);
   const myExchanges = exchanges.map((e) => ({
     시각: e['시각'] || '', 상품: e['상품'] || '', 가격: e['가격'] || '',
-    상태: String(e['지급여부'] || '').trim() ? '지급 완료' : '신청 중',
+    상태: String(e['지급여부'] || '').trim() ? '🚚 상품을 보냈어요! 곧 도착할 거예요' : '신청 중',
   })).reverse();
 
-  return Response.json({ ok: true, ...points, 상품목록: goods, 내신청: myExchanges });
+  return Response.json({ ok: true, ...points, 이번주내역, 상품목록: goods, 내신청: myExchanges });
 }
 
 export async function POST(request) {
