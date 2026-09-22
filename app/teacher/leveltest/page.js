@@ -99,6 +99,11 @@ ${link}`;
           </button>
         </a>
 
+        <button className="btn btn-outline" style={{ marginTop: 10 }}
+          onClick={() => { if (!isDemo) markSent(selected, '완료'); }}>
+          ✅ 처리완료 — 목록에서 보내기
+        </button>
+
         <div className="section-label">전체 리포트 (참고용)</div>
         <div
           className="result-box"
@@ -108,7 +113,7 @@ ${link}`;
         </div>
 
         <div className="notice" style={{ marginTop: 18 }}>
-          "카톡 발송용 복사하기"를 누르면 <b>발송여부</b>가 자동으로 처리됩니다. 실수로 눌렀으면 되돌리기.
+          "카톡 발송용 복사하기"를 누르거나 위 처리완료 버튼을 누르면 <b>발송여부</b>가 처리됩니다. 실수로 눌렀으면 되돌리기.
           완료 표시된 건은 이 목록에서 자동으로 사라집니다.
         </div>
       </main>
@@ -135,14 +140,18 @@ ${link}`;
       ) : (
         <div className="card-list">
           {results.map((r, i) => (
-            <button key={i} className="card" onClick={() => setSelected(r)}>
+            <div key={i} className="card" style={{ cursor: 'pointer' }} onClick={() => setSelected(r)}>
               <div className="card-icon" style={{ background: 'var(--teal)', fontSize: 18 }}>📋</div>
               <div>
                 <div className="card-title">{r['전화번호']}</div>
                 <div className="card-desc">{r['제출일시']}</div>
               </div>
-              <div className="card-arrow">→</div>
-            </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); if (!isDemo) { markSent(r, '완료'); setResults((list) => list.filter((x) => x !== r)); } }}
+                style={{ marginLeft: 'auto', border: '2px solid var(--border)', background: '#fff', borderRadius: 10, padding: '6px 10px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                완료
+              </button>
+            </div>
           ))}
         </div>
       )}

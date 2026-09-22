@@ -18,8 +18,9 @@ const SYSTEM = `너는 R U Thinking? 영어 학원의 학부모 주간 리포트
 1. 인사 및 리포트 기간
 2. 이번 주 학습 현황 (단어시험, 숙제, 수업 참여 등)
 3. 잘한 점 (구체적으로, 칭찬)
-4. 다음 주 포인트 (개선이 필요하면 정중하게)
-5. 마무리 인사
+4. 리딩 문제 풀이 패턴 (리딩 기록이 있을 때만): 같은 함정 유형이 2회 이상 반복되면 "이런 문제가 나오면 ~하는 식으로 고르는 경향이 보입니다"처럼 패턴을 짚고, 수업과 숙제 힌트가 그 습관을 어떻게 교정하고 있는지 한두 문장으로 설명. 다음 주에 확인할 지표(첫 시도 정답률 변화)로 마무리. 리딩 기록이 없거나 반복 패턴이 없으면 이 문단은 통째로 생략
+5. 다음 주 포인트 (개선이 필요하면 정중하게)
+6. 마무리 인사
 
 ## 절대 규칙
 - 데이터에 없는 내용을 지어내지 마.
@@ -84,6 +85,34 @@ export async function POST(request) {
     });
   }
 
+  // 이번 주 리딩 숙제 기록 (오류 패턴 진단용) — 탭이 없거나 비면 조용히 생략
+  let readingText = '';
+  if (unifiedId) {
+    try {
+      const rr = await readTab(unifiedId, '리딩기록');
+      const recs = (rr.rows || []).filter((row) => {
+        if (!sameName(row['이름'], studentName)) return false;
+        if (className && row['반이름'] && !sameName(row['반이름'], className)) return false;
+        const d = parseDate(String(row['시각'] || '').slice(0, 10));
+        return d && d >= start && d <= end;
+      });
+      if (recs.length > 0) {
+        const total = recs.length;
+        const firstTryO = recs.filter((r2) => r2['첫시도'] === 'O').length;
+        const gapCount = {};
+        recs.forEach((r2) => {
+          const g = String(r2['오답구멍'] || '').trim();
+          if (g) gapCount[g] = (gapCount[g] || 0) + 1;
+        });
+        const gapText = Object.entries(gapCount)
+          .sort((a, b) => b[1] - a[1])
+          .map(([g, c]) => `${g} ${c}회`)
+          .join(', ');
+        readingText = `\n## 이번 주 리딩 문제 풀이 기록 (사이트 숙제)\n- 푼 문제 ${total}개 중 첫 시도 정답 ${firstTryO}개\n${gapText ? `- 처음에 틀렸을 때 걸린 함정 유형: ${gapText}` : ''}`;
+      }
+    } catch (e) {}
+  }
+
   // AI에게 보낼 데이터 정리
   const dataText = studentRows
     .map((row) => {
@@ -100,7 +129,7 @@ export async function POST(request) {
 리포트 기간: ${formatDate(start)} ~ ${formatDate(end)}
 
 ## 이번 주 수업 기록
-${dataText}
+${dataText}${readingText}
 ${extraNote ? `\n## 코치 추가 메모\n${extraNote}` : ''}
 
 위 기록을 바탕으로 학부모님께 보낼 주간 리포트를 작성해줘.`;

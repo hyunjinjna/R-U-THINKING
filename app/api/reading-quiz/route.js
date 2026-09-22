@@ -1,6 +1,6 @@
 // 사이트 리딩 숙제 — 문항 조회 + 풀이 기록
 // 문제는 통합 대시보드 시트 "리딩문제" 탭 (교재|유닛|문항ID|지문|질문|보기1~4|정답번호|해설|보기1구멍~보기4구멍)
-// 기록은 "리딩기록" 탭 (시각|이름|반이름|회차|교재|유닛|문항ID|첫시도|힌트사용)
+// 기록은 "리딩기록" 탭 (시각|이름|반이름|회차|교재|유닛|문항ID|첫시도|힌트사용|오답구멍)
 import { readTab, appendRows } from '../../../lib/sheetsWrite';
 import { dashboardSheetId } from '../../../lib/dashboardData';
 import { sameName, normalize } from '../../../lib/utils';
@@ -33,6 +33,7 @@ export async function GET(request) {
       보기: [row['보기1'], row['보기2'], row['보기3'], row['보기4']].map((v) => String(v || '')),
       정답번호: parseInt(row['정답번호'], 10) || 0,
       해설: row['해설'] || '',
+      구멍: [row['보기1구멍'], row['보기2구멍'], row['보기3구멍'], row['보기4구멍']].map((v) => String(v || '').trim()),
     }))
     .filter((x) => x.문항ID && x.지문 && x.정답번호 >= 1);
   const doneIds = (r.rows || [])
@@ -45,12 +46,12 @@ export async function POST(request) {
   const body = await request.json();
   const id = dashboardSheetId();
   if (!id) return Response.json({ error: '대시보드 시트가 설정되지 않았습니다.' });
-  const { name, 반이름, 회차, book, unit, 문항ID, 첫시도, 힌트사용 } = body || {};
+  const { name, 반이름, 회차, book, unit, 문항ID, 첫시도, 힌트사용, 오답구멍 } = body || {};
   if (!name || !문항ID) return Response.json({ error: '기록 정보가 부족합니다.' });
   try {
     await appendRows(id, R_TAB, [[
       koreaTimeString(), name, 반이름 || '', 회차 || '', book || '', unit || '', 문항ID,
-      첫시도 === 'O' ? 'O' : 'X', 힌트사용 ? 'O' : '',
+      첫시도 === 'O' ? 'O' : 'X', 힌트사용 ? 'O' : '', 오답구멍 || '',
     ]]);
     return Response.json({ ok: true });
   } catch (e) {

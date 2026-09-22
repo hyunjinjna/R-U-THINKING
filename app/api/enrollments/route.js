@@ -3,7 +3,8 @@ import { SHEET_URLS, DEMO_ENROLLMENTS, IS_DEMO } from '../../../lib/config';
 import { appendRow, extractSheetId, readTab, updateCell } from '../../../lib/sheetsWrite';
 import { splitMulti, normalize, sameName, koreaTimeString } from '../../../lib/utils';
 import { buildClasscardAccount, buildWelcomeNotice, textbooksOfClass } from '../../../lib/notice';
-import { loadClassesWithCurriculum } from '../../../lib/dashboardData';
+import { loadClassesWithCurriculum, dashboardSheetId } from '../../../lib/dashboardData';
+import { firstMonthFee, formatWon } from '../../../lib/fee';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +44,8 @@ export function waitStatusOf(value) {
   if (v.startsWith('연락함')) return { key: 'contacted', label: '📞 연락함' };
   if (v.startsWith('결제대기')) {
     const parts = v.split('|');
-    return { key: 'pending_pay', label: '💳 결제 대기', 반: (parts[1] || '').trim() };
+    const 반 = (parts[1] || '').trim();
+    return { key: 'pending_pay', label: '💳 결제 대기', 반, 반들: 반.split(',').map((s) => s.trim()).filter(Boolean) };
   }
   return { key: 'closed', label: v.startsWith('등록전환') ? '등록 전환' : '처리 완료' };
 }
@@ -173,6 +175,84 @@ export async function POST(request) {
     const 계정 = { 아이디: acc.기존아이디 || '', 비번: acc.기존비번 || '' };
     const { 안내문, missing } = await buildNoticeFor(이름, 반이름들, 계정);
     return Response.json({ ok: true, 안내문, 계정, warnings: missing.map((m) => `"${m}" 반을 운영시트에서 못 찾았습니다.`) });
+  }
+
+  // ===== 등록: 반 배정 → 결제 대기 (아직 학생명단에 안 넣음, 배정 반들을 처리여부에 저장) =====
+  if (body.mode === 'enrollassign') {
+    const list = body.assignments || [];
+    if (list.length === 0 || list.some((a) => !a.배정반)) {
+      return Response.json({ error: '모든 과목에 반을 선택해주세요.' });
+    }
+    const 반들 = list.map((a) => a.배정반).join(',');
+    const r = await markDoneWith(body.enrollment, `결제대기|${반들}|` + koreaTimeString());
+    return Response.json(r.ok ? { ok: true, 반들 } : r);
+  }
+
+  // ===== 결제 안내 문구 (신입생 원비 안내문) — 결제 대기 상태에서 복사용 =====
+  if (body.mode === 'feenotice') {
+    const enrollment = body.enrollment || {};
+    const 반이름들 = (body.반이름들 || []).filter(Boolean);
+    if (반이름들.length === 0) return Response.json({ error: '배정된 반이 없습니다.' });
+
+    const classes = await loadClassesWithCurriculum();
+    const warnings = [];
+
+    // 설정 탭에서 수강료계좌
+    let 계좌 = '';
+    const dashId = dashboardSheetId();
+    if (dashId) {
+      const st = await readTab(dashId, '설정').catch(() => ({ rows: [] }));
+      const hit = (st.rows || []).find((r) => String(r['키'] || r['항목'] || '').trim() === '수강료계좌');
+      계좌 = hit ? String(hit['값'] || '').trim() : '';
+    }
+    if (!계좌) { 계좌 = '(계좌번호)'; warnings.push('대시보드 설정 탭에 "수강료계좌" 키가 없어요 — 넣으면 자동으로 채워집니다.'); }
+
+    const feeLines = [];
+    const classLines = [];
+    let total = 0;
+    let anyMissing = false;
+    for (const n of 반이름들) {
+      const cls = classes.find((c) => sameName(c['반이름'], n));
+      if (!cls) {
+        warnings.push(`"${n}" 반을 운영시트에서 못 찾았습니다.`);
+        classLines.push(`📚 수업: ${n}`);
+        feeLines.push(반이름들.length > 1 ? `  · ${n}: OOO원` : '💰 첫 달 수강료: OOO원');
+        anyMissing = true;
+        continue;
+      }
+      classLines.push(`📚 수업: ${cls['반이름']} (${cls['수업요일'] || ''} ${cls['수업시간'] || ''})`.trim());
+      const fee = firstMonthFee(cls);
+      if (!fee.amount) {
+        anyMissing = true;
+        warnings.push(`"${n}" 반의 월수강료가 비어 있어요 — 운영시트 반 탭 월수강료 열에 금액을 넣으면 자동 계산됩니다.`);
+        feeLines.push(반이름들.length > 1 ? `  · ${n}: OOO원` : '💰 첫 달 수강료: OOO원');
+      } else {
+        total += fee.amount;
+        const basisTxt = fee.basis ? ` (${fee.basis})` : '';
+        feeLines.push(반이름들.length > 1 ? `  · ${n}: ${formatWon(fee.amount)}${basisTxt}` : `💰 첫 달 수강료: ${formatWon(fee.amount)}${basisTxt}`);
+      }
+    }
+    if (반이름들.length > 1) feeLines.push(`💰 첫 달 수강료 합계: ${anyMissing ? 'OOO원' : formatWon(total)}`);
+
+    const 학생 = String(enrollment['학생 이름'] || '').trim();
+    const 학부모 = String(enrollment['학부모 이름'] || '').trim();
+    const 문구 = [
+      `[R U Thinking?] ${학부모 ? 학부모 + ' 학부모님' : '학부모님'}, 안녕하세요 😊`,
+      '',
+      `${학생} 학생의 등록 신청 잘 받았습니다!`,
+      '',
+      ...classLines,
+      ...feeLines,
+      `🏦 입금 계좌: ${계좌}`,
+      `✏️ 입금자명: ${학생} (학생 이름으로 부탁드려요)`,
+      '',
+      '입금이 확인되면 등록 확정과 함께',
+      '첫 수업 준비 안내를 보내드리겠습니다.',
+      '',
+      '궁금하신 점은 이 카톡으로 편하게 남겨주세요. 감사합니다!',
+    ].join('\n');
+
+    return Response.json({ ok: true, 문구, warnings });
   }
 
   // ===== 대기: 연락함 기록 (수업 열렸어요 문구 복사 시) =====

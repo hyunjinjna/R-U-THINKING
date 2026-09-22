@@ -767,7 +767,8 @@ function ReadingQuizModal({ quiz, profile, onClose }) {
   const [aiText, setAiText] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [usedHint, setUsedHint] = useState(false);
-  const [firstTry, setFirstTry] = useState(null); // 'O' | 'X'
+  const [firstTry, setFirstTry] = useState(null);
+  const [firstWrongGap, setFirstWrongGap] = useState(''); // 'O' | 'X'
   const [score, setScore] = useState(0);
 
   const PRAISES = ['정답이야! 🎉', '와, 잘 읽었네! ⭐', '딩동댕! 완벽해 👏', '멋지다, 바로 맞혔어! 🌟', '그렇지! 지문을 제대로 읽었구나 💪'];
@@ -805,7 +806,7 @@ function ReadingQuizModal({ quiz, profile, onClose }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: profile.이름, 반이름: quiz.cls ? quiz.cls['반이름'] : '', 회차: quiz.session || '',
-          book: quiz.book, unit: quiz.unit, 문항ID: q.문항ID, 첫시도, 힌트사용: usedHint,
+          book: quiz.book, unit: quiz.unit, 문항ID: q.문항ID, 첫시도, 힌트사용: usedHint, 오답구멍: 첫시도 === 'O' ? '' : firstWrongGap,
         }),
       });
     } catch (e) {}
@@ -843,6 +844,7 @@ function ReadingQuizModal({ quiz, profile, onClose }) {
       await record(ft);
     } else if (phase === 'answer') {
       setFirstTry('X');
+      setFirstWrongGap((q.구멍 && q.구멍[i]) || '');
       setPhase('hint');
       setUsedHint(true);
       askAI('hint', i);
@@ -855,7 +857,7 @@ function ReadingQuizModal({ quiz, profile, onClose }) {
   };
 
   const next = () => {
-    setPicked(null); setAiText(''); setUsedHint(false); setFirstTry(null);
+    setPicked(null); setAiText(''); setUsedHint(false); setFirstTry(null); setFirstWrongGap('');
     if (state.idx + 1 >= state.questions.length) setPhase('done');
     else { setState((s) => ({ ...s, idx: s.idx + 1 })); setPhase('answer'); }
   };
@@ -986,7 +988,7 @@ function HomeworkLine({ item, checkKey, onReadingQuiz }) {
   if (item.link && item.link.startsWith('reading-quiz://')) {
     const [book, unit] = item.link.replace('reading-quiz://', '').split('@');
     return (
-      <button className="card" style={{ width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer' }}
+      <button className="card" style={{ width: '100%', textAlign: 'left', border: '2px solid var(--border)', background: '#fff', font: 'inherit', cursor: 'pointer' }}
         onClick={() => onReadingQuiz && onReadingQuiz({ book, unit: parseInt(unit, 10) })}>
         {inner}
         {checkBtn}
@@ -1060,7 +1062,7 @@ function HomeScreen({
       ) : (
         <div className="card-list">
           {todayCards.map(({ cls, info }, i) => (
-            <TodayCard key={i} cls={cls} info={info} onEnterZoom={onEnterZoom} />
+            <TodayCard key={i} cls={cls} info={info} onEnterZoom={onEnterZoom} kakaoLink={kakaoLink} />
           ))}
         </div>
       )}
@@ -1159,7 +1161,7 @@ function HomeScreen({
   );
 }
 
-function TodayCard({ cls, info, onEnterZoom }) {
+function TodayCard({ cls, info, onEnterZoom, kakaoLink }) {
   if (info.type === 'ended') {
     return (
       <div className="card" style={{ cursor: 'default' }}>
@@ -1201,11 +1203,11 @@ function TodayCard({ cls, info, onEnterZoom }) {
           <div className="card-icon" style={{ background: 'var(--navy)' }}>🎥</div>
           <div>
             <div className="card-title">{cls['반이름']} 수업 입장</div>
-            <div className="card-desc">{cls['수업시간']} 수업 · 미리 들어갈 수 있어요</div>
+            <div className="card-desc">{cls['수업시간']} 수업{cls['진도'] ? ` · 오늘 진도: ${cls['진도']}` : ''} · 미리 들어갈 수 있어요</div>
           </div>
           <div className="card-arrow">→</div>
         </button>
-        <ZoomTroubleHint />
+        <ZoomTroubleHint kakaoLink={kakaoLink} />
       </>
     );
   }
@@ -1241,12 +1243,24 @@ function TodayCard({ cls, info, onEnterZoom }) {
           <div className="card-arrow">→</div>
         </a>
       )}
-      <ZoomTroubleHint />
+      <ZoomTroubleHint kakaoLink={kakaoLink} />
     </>
   );
 }
 
-function ZoomTroubleHint() {
+function ZoomTroubleHint({ kakaoLink }) {
+  // 카톡 채널이 연결돼 있으면 실제 연락 버튼, 아직이면 안내 문구 (채널 생기면 자동으로 버튼 전환)
+  if (kakaoLink) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '-4px 0 0 4px' }}>
+        <span style={{ fontSize: 11, color: 'var(--light)' }}>줌이 안 열려요? 인터넷 연결 확인 후에도 안 되면</span>
+        <a href={kakaoLink} target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 12, fontWeight: 800, color: '#3c1e1e', background: '#fee500', padding: '5px 10px', borderRadius: 8, textDecoration: 'none' }}>
+          🙋 선생님께 알리기
+        </a>
+      </div>
+    );
+  }
   return (
     <div style={{ fontSize: 11, color: 'var(--light)', margin: '-6px 0 0 4px' }}>
       줌이 안 열려요? 인터넷 연결을 확인하거나 선생님께 카톡으로 알려줘!

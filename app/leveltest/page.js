@@ -356,14 +356,16 @@ export default function LevelTestPage() {
           <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
           <span className="badge">R U Thinking?</span>
         </div>
-        <h1 className="page-title">무료 레벨테스트</h1>
+        <h1 className="page-title">무료 영어 레벨테스트</h1>
         <p className="page-sub" style={{ fontSize: 15, lineHeight: 1.7 }}>
-          아이의 정확한 영어 실력,
-          <br />
-          대치동 200명을 가르친 노하우로 진단해드려요.
+          대치동 상위 1% 선생님이 설계한 정밀 진단
         </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+          <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999 }}>⏱ 약 5~10분</span>
+          <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999 }}>📋 진단 리포트 카톡 발송</span>
+        </div>
 
-        <div className="card-list" style={{ marginTop: 24 }}>
+        <div className="card-list" style={{ marginTop: 20 }}>
           <button className="card" onClick={startComprehensive}>
             <div className="card-icon" style={{ background: 'var(--navy)' }}>A</div>
             <div>
@@ -379,6 +381,35 @@ export default function LevelTestPage() {
             </div>
             <div className="card-arrow">→</div>
           </button>
+        </div>
+
+        {/* --- 스크롤 설득 구간 --- */}
+        <div className="section-label" style={{ marginTop: 34 }}>이런 리포트를 받아요</div>
+        <div style={{ border: '2px solid var(--border)', borderRadius: 16, padding: 18, background: '#fff' }}>
+          <div style={{ background: 'var(--navy)', color: '#fff', borderRadius: 12, padding: '12px 14px', fontSize: 13, lineHeight: 1.7, wordBreak: 'keep-all' }}>
+            읽기 자체는 되는데, 문장 속 <b>지시어가 무엇을 가리키는지</b> 놓치는 순간 흐름을 잃습니다.
+            이 구멍부터 메우면 리딩이 한 단계 올라갑니다.
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
+            <span style={{ background: 'var(--soft-red, #fdeef0)', color: 'var(--red)', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>지시어 이해 부족</span>
+            <span style={{ background: 'var(--soft-red, #fdeef0)', color: 'var(--red)', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>유사 단어 혼동</span>
+            <span style={{ background: '#effaf8', color: 'var(--teal)', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>추천 반까지 콕</span>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--med)', marginTop: 10, lineHeight: 1.6, wordBreak: 'keep-all' }}>
+            점수만 드리지 않습니다. 어디가 뚫려 있는지 찾아내고, 그 구멍을 메우는 반을 추천해 드려요.
+          </div>
+        </div>
+
+        <div className="section-label" style={{ marginTop: 26 }}>이 레벨테스트는 Julia 선생님이 직접 진단합니다</div>
+        <div style={{ border: '2px solid var(--border)', borderRadius: 16, padding: 18, background: '#fff', fontSize: 14, lineHeight: 1.8, color: 'var(--navy)', wordBreak: 'keep-all' }}>
+          문제 설계부터 결과 판독까지 — 대치동에서 200명이 넘는 아이들을 1:1로 가르치며
+          구멍을 찾아 메워온 Julia 선생님이 직접 만들고, 제출된 테스트를 직접 확인해
+          리포트를 보내드립니다.
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
+            <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 999 }}>미국 유학 10년</span>
+            <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 999 }}>대치동 1:1 지도 200명+</span>
+            <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 999 }}>김과외 상위 0.02%</span>
+          </div>
         </div>
       </main>
     );
