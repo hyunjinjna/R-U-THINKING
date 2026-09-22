@@ -15,6 +15,7 @@ export default function EnrollmentsPage() {
   const [assignments, setAssignments] = useState({});
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  const [listNotice, setListNotice] = useState(''); // 목록 상단 확인 문구 (처리 후 어디로 갔는지)
   const [notice, setNotice] = useState(null); // { 안내문, 계정, warnings }
   const [copied, setCopied] = useState(false);
   const [showDone, setShowDone] = useState(false);
@@ -106,6 +107,7 @@ export default function EnrollmentsPage() {
         setCopied(false);
         // 처리된 건은 대기 목록에서 제거
         setEnrollments((prev) => prev.filter((e) => e !== selected));
+        setListNotice(`✅ ${selected['학생 이름']} — 처리완료! 학생명단에 추가됐고 처리완료 보관함으로 이동했어요.`);
       } else {
         setMessage('일부 처리에 실패했습니다: ' + JSON.stringify(json.results));
       }
@@ -124,17 +126,25 @@ export default function EnrollmentsPage() {
     return { key: 'closed' };
   };
 
-  // "수업 열렸어요" 연락 문구 (알리고 키 오면 자동 발송으로 교체 예정 — 지금은 복사해서 문자·카톡)
+  // "수업 열렸어요" 연락 문구 — 카톡 발송용, 전화·답장 유도 없음(무전화 원칙), 등록 링크 자동 생성
   const buildOpenMessage = (row) => {
     const it = (row.items && row.items[0]) || {};
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const link = `${origin}/register?levels=${encodeURIComponent(it.레벨 || '')}`;
     return [
-      `${row['학부모 이름'] || ''} 학부모님, 안녕하세요! R U Thinking? 영어학원입니다 😊`,
+      `[R U Thinking?] ${row['학부모 이름'] || ''} 학부모님, 안녕하세요 😊`,
       ``,
-      `기다려주신 ${it.과목 || ''} ${it.레벨 || ''} 수업(${it.희망시간 || ''})이 열리게 되어 연락드립니다.`,
-      `${row['학생 이름'] || ''} 학생이 함께할 수 있어요!`,
+      `기다려주신 ${it.과목 || ''} ${it.레벨 || ''} 수업(${it.희망시간 || ''})이 열려서 안내드립니다!`,
       ``,
-      `등록을 원하시면 이 번호로 답장 주세요. 수업 안내와 결제 방법을 알려드리겠습니다.`,
-      `궁금하신 점도 편하게 문의해주세요. 감사합니다!`,
+      `아래 링크에서 바로 등록하실 수 있어요 👇`,
+      link,
+      ``,
+      `① 링크를 누르면 이 수업의 시간표가 바로 보여요`,
+      `② 원하시는 시간을 [담기] → [등록하기]를 누르면 신청서가 열립니다`,
+      `   (수업 정보는 미리 채워져 있어서 학부모님 정보만 적으시면 돼요)`,
+      `③ 신청서를 제출해주시면 결제 안내를 카톡으로 보내드릴게요`,
+      ``,
+      `궁금하신 점은 이 카톡으로 편하게 남겨주세요. 감사합니다!`,
     ].join('\n');
   };
 
@@ -202,6 +212,7 @@ export default function EnrollmentsPage() {
         setNotice({ 안내문: json.안내문, 계정: json.계정, warnings: json.warnings || [] });
         setCopied(false);
         setEnrollments((prev) => prev.filter((e) => e !== selected));
+        setListNotice(`✅ ${selected['학생 이름']} — 등록 확정! 처리완료 보관함으로 이동했어요. (기록·안내문은 [처리완료 보기]에서)`);
       } else setMessage('일부 처리에 실패했습니다: ' + JSON.stringify(json.results));
     } catch (err) { setMessage('처리 실패: ' + err.message); }
     setSaving(false);
@@ -220,6 +231,7 @@ export default function EnrollmentsPage() {
       const json = await res.json();
       if (json.error) setMessage(json.error);
       else {
+        setListNotice(`📁 ${selected['학생 이름']} — 연락 마침으로 처리완료 보관함에 옮겨졌어요. (데이터는 시트에 그대로 남아 있어요)`);
         setEnrollments((prev) => prev.filter((e) => e !== selected));
         setSelected(null);
       }
@@ -440,6 +452,12 @@ export default function EnrollmentsPage() {
 
       <h1 className="page-title">등록 신청 목록</h1>
       <p className="page-sub">처리 대기 중 {enrollments.length}건</p>
+      {listNotice && (
+        <div className="notice" style={{ marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+          <span>{listNotice}</span>
+          <button onClick={() => setListNotice('')} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--med)' }}>✕</button>
+        </div>
+      )}
 
       {isDemo && (
         <div className="notice">

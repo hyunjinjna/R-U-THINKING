@@ -11,8 +11,7 @@ import {
 } from '../../../lib/dashboard';
 import {
   dashboardSheetId, loadClassesWithCurriculum, loadStudents, loadSettings,
-  findClass, studentsOfClass, sessionInfo, previousClassDate,
-} from '../../../lib/dashboardData';
+  findClass, studentsOfClass, sessionInfo, previousClassDate, loadReadingData } from '../../../lib/dashboardData';
 
 export const dynamic = 'force-dynamic';
 
@@ -76,6 +75,8 @@ export async function GET(request) {
   });
   const expectedCode = row ? (row['시크릿코드'] || row['시크릿 코드'] || '') : '';
 
+  const reading = await loadReadingData();
+
   const rows = roster.map((s) => {
     const name = s['이름'];
     const existing = saved.find((r) => r['날짜'] === date && sameName(r['반이름'], cls['반이름']) && sameName(r['이름'], name));
@@ -92,6 +93,13 @@ export async function GET(request) {
       records: ccRecords, studentName: name, classcardId: s['클래스카드아이디'] || s['클래스카드ID'] || '',
       textbooks, unit, deadline: classStart, prevClassStart: prevStart, settings,
     });
+    // 사이트 리딩 숙제 판정을 병합 (그 유닛 문제가 있을 때만 요구, 나쁜 쪽 우선)
+    const rd = judgeReadingHomework({
+      readingQuestions: reading.questions, readingRecords: reading.records,
+      studentName: name, textbooks, unit, deadline: classStart,
+    });
+    hw.숙제 = mergeHomework(hw.숙제, rd.리딩);
+    hw.근거 = [...(hw.근거 || []), ...(rd.근거 || [])];
     const notes = judgeNotes(notesRows, name, prevStart, classStart);
 
     const auto = {

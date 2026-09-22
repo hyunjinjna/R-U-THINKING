@@ -94,3 +94,38 @@ assert.equal(d.judgeNotes(notes, '박없음', prevStart, deadline), '');
 // ---- 설정 ----
 assert.deepEqual(d.parseSettings([{ 키: '리콜기준', 값: '300' }, { 키: '엉뚱', 값: '1' }]).리콜기준, 300);
 console.log('all dashboard tests passed');
+
+// ===== 리딩 숙제 판정 =====
+{
+  const Q = [
+    { 교재: 'Easy Link 4', 유닛: '3', 문항ID: 'EL4-3-1' },
+    { 교재: 'Easy Link 4', 유닛: '3', 문항ID: 'EL4-3-2' },
+  ];
+  const deadline = new Date('2026-09-23T17:00:00');
+  const rec = (id, t) => ({ 이름: '김민재', 교재: 'Easy Link 4', 유닛: '3', 문항ID: id, 시각: t });
+
+  // 전부 마감 전 → O
+  let r = d.judgeReadingHomework({ readingQuestions: Q, readingRecords: [rec('EL4-3-1', '2026-09-22 18:00'), rec('EL4-3-2', '2026-09-22 18:10')], studentName: '김민재', textbooks: ['Easy Link 4'], unit: 3, deadline });
+  assert.equal(r.리딩, 'O');
+  // 일부만 → X
+  r = d.judgeReadingHomework({ readingQuestions: Q, readingRecords: [rec('EL4-3-1', '2026-09-22 18:00')], studentName: '김민재', textbooks: ['Easy Link 4'], unit: 3, deadline });
+  assert.equal(r.리딩, 'X');
+  // 마감 후 완료 → 늦음
+  r = d.judgeReadingHomework({ readingQuestions: Q, readingRecords: [rec('EL4-3-1', '2026-09-22 18:00'), rec('EL4-3-2', '2026-09-23 19:00')], studentName: '김민재', textbooks: ['Easy Link 4'], unit: 3, deadline });
+  assert.equal(r.리딩, '늦음');
+  // 그 유닛 문제 없음 → '' (요구 안 함)
+  r = d.judgeReadingHomework({ readingQuestions: Q, readingRecords: [], studentName: '김민재', textbooks: ['Easy Link 4'], unit: 9, deadline });
+  assert.equal(r.리딩, '');
+  // 이름 유연 비교 (공백)
+  r = d.judgeReadingHomework({ readingQuestions: Q, readingRecords: [rec('EL4-3-1', '2026-09-22 18:00'), { ...rec('EL4-3-2', '2026-09-22 18:10'), 이름: '김 민재' }], studentName: '김민재', textbooks: ['easy link4'], unit: 3, deadline });
+  assert.equal(r.리딩, 'O');
+
+  // 병합: 나쁜 쪽 우선, '' 무시
+  assert.equal(d.mergeHomework('O', 'X'), 'X');
+  assert.equal(d.mergeHomework('O', '늦음'), '늦음');
+  assert.equal(d.mergeHomework('늦음', 'O'), '늦음');
+  assert.equal(d.mergeHomework('', 'O'), 'O');
+  assert.equal(d.mergeHomework('X', ''), 'X');
+  assert.equal(d.mergeHomework('', ''), '');
+  console.log('리딩 숙제 판정 ✓');
+}

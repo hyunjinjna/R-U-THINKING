@@ -75,6 +75,7 @@ export default function StudentPage() {
   const [myName, setMyName] = useState('');
   const [namePopup, setNamePopup] = useState(false);
   const [codePopup, setCodePopup] = useState(false);
+  const [readingQuiz, setReadingQuiz] = useState(null); // { book, unit, cls, session } — 사이트 리딩 숙제
   const [codeInput, setCodeInput] = useState('');
   const [codeResult, setCodeResult] = useState('');
   const [conceptClass, setConceptClass] = useState(null);
@@ -306,8 +307,10 @@ export default function StudentPage() {
   // ===== 홈 화면 =====
   if (step === 'home') {
     return (
+      <>
       <HomeScreen
         profile={profile}
+        onOpenReading={setReadingQuiz}
         myClasses={myClasses}
         unmatchedNames={unmatchedNames}
         statuses={statuses}
@@ -348,6 +351,10 @@ export default function StudentPage() {
           } catch (e) { setCodeResult('연결이 안 돼요. 잠시 후 다시!'); }
         }}
       />
+      {readingQuiz && (
+        <ReadingQuizModal quiz={readingQuiz} profile={profile} onClose={() => setReadingQuiz(null)} />
+      )}
+      </>
     );
   }
 
@@ -749,7 +756,187 @@ function saveSelfChecks(obj) {
   try { localStorage.setItem(SELF_CHECK_KEY, JSON.stringify(obj)); } catch (e) {}
 }
 
-function HomeworkLine({ item, checkKey }) {
+
+// ===== 사이트 리딩 숙제 — 문제 풀기 모달 =====
+// 흐름: 답 고르기 → 틀리면 AI 유도 질문 1번 → 재도전 → 또 틀리면 해설 → 다음 문제
+// 완료 기준 = 전부 풀기 (첫 시도 정답·힌트 사용은 기록으로만 남음)
+function ReadingQuizModal({ quiz, profile, onClose }) {
+  const [state, setState] = useState({ loading: true, error: '', questions: [], idx: 0 });
+  const [phase, setPhase] = useState('answer'); // answer | hint | explain | correct | done
+  const [picked, setPicked] = useState(null);
+  const [aiText, setAiText] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [usedHint, setUsedHint] = useState(false);
+  const [firstTry, setFirstTry] = useState(null); // 'O' | 'X'
+  const [score, setScore] = useState(0);
+
+  const PRAISES = ['정답이야! 🎉', '와, 잘 읽었네! ⭐', '딩동댕! 완벽해 👏', '멋지다, 바로 맞혔어! 🌟', '그렇지! 지문을 제대로 읽었구나 💪'];
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/reading-quiz?book=${encodeURIComponent(quiz.book)}&unit=${quiz.unit}&name=${encodeURIComponent(profile.이름)}`);
+        const json = await res.json();
+        if (!alive) return;
+        if (json.error) { setState({ loading: false, error: json.error, questions: [], idx: 0 }); return; }
+        const done = new Set(json.doneIds || []);
+        const remaining = (json.questions || []).filter((q) => !done.has(q.문항ID));
+        if ((json.questions || []).length === 0) {
+          setState({ loading: false, error: '이 유닛의 리딩 문제가 아직 준비되지 않았어요. 선생님께 알려줘!', questions: [], idx: 0 });
+        } else if (remaining.length === 0) {
+          setState({ loading: false, error: '', questions: [], idx: 0 });
+          setPhase('done');
+        } else {
+          setState({ loading: false, error: '', questions: remaining, idx: 0 });
+        }
+      } catch (e) {
+        if (alive) setState({ loading: false, error: '문제를 불러오지 못했어요. 잠깐 뒤에 다시 열어봐!', questions: [], idx: 0 });
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const q = state.questions[state.idx];
+
+  const record = async (첫시도) => {
+    try {
+      await fetch('/api/reading-quiz', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: profile.이름, 반이름: quiz.cls ? quiz.cls['반이름'] : '', 회차: quiz.session || '',
+          book: quiz.book, unit: quiz.unit, 문항ID: q.문항ID, 첫시도, 힌트사용: usedHint,
+        }),
+      });
+    } catch (e) {}
+  };
+
+  const askAI = async (mode, chosenIdx) => {
+    setAiLoading(true);
+    setAiText('');
+    try {
+      const res = await fetch('/api/reading-hint', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode, 지문: q.지문, 질문: q.질문, 보기: q.보기, 정답번호: q.정답번호, 선택번호: chosenIdx + 1 }),
+      });
+      const json = await res.json();
+      if (json.text) setAiText(json.text);
+      else setAiText(mode === 'explain'
+        ? (q.해설 || `정답은 ${q.정답번호}번 "${q.보기[q.정답번호 - 1]}"이야. 지문을 한 문장씩 다시 읽으면서 근거를 찾아보자!`)
+        : '지문을 처음부터 천천히 다시 읽어볼까? 질문이 무엇을 묻는지 먼저 생각해 보자!');
+    } catch (e) {
+      setAiText(mode === 'explain'
+        ? (q.해설 || `정답은 ${q.정답번호}번 "${q.보기[q.정답번호 - 1]}"이야.`)
+        : '지문을 처음부터 천천히 다시 읽어볼까?');
+    }
+    setAiLoading(false);
+  };
+
+  const choose = async (i) => {
+    if (aiLoading || phase === 'explain' || phase === 'correct') return;
+    setPicked(i);
+    const correct = i + 1 === q.정답번호;
+    if (correct) {
+      const ft = firstTry === null ? 'O' : firstTry;
+      if (firstTry === null) setScore((s) => s + 1);
+      setPhase('correct');
+      await record(ft);
+    } else if (phase === 'answer') {
+      setFirstTry('X');
+      setPhase('hint');
+      setUsedHint(true);
+      askAI('hint', i);
+    } else {
+      // 힌트 뒤 재도전도 틀림 → 해설
+      setPhase('explain');
+      askAI('explain', i);
+      await record('X');
+    }
+  };
+
+  const next = () => {
+    setPicked(null); setAiText(''); setUsedHint(false); setFirstTry(null);
+    if (state.idx + 1 >= state.questions.length) setPhase('done');
+    else { setState((s) => ({ ...s, idx: s.idx + 1 })); setPhase('answer'); }
+  };
+
+  const optionStyle = (i) => {
+    const base = { width: '100%', textAlign: 'left', padding: '14px 16px', borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: 'pointer', border: '2px solid var(--border)', background: '#fff', color: 'var(--navy)' };
+    if (picked === i && (phase === 'hint' || phase === 'explain')) return { ...base, border: '2px solid var(--red, #e5484d)', background: '#fff5f5' };
+    if (phase === 'correct' && i + 1 === q.정답번호) return { ...base, border: '2px solid var(--teal)', background: '#effaf8' };
+    if (phase === 'explain' && i + 1 === q.정답번호) return { ...base, border: '2px solid var(--teal)', background: '#effaf8' };
+    return base;
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(20,25,60,0.55)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 14 }}>
+      <div style={{ background: '#fff', borderRadius: 18, maxWidth: 560, width: '100%', maxHeight: '92vh', overflowY: 'auto', padding: 22 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 17 }}>📖 리딩 문제 — Unit {quiz.unit}</div>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--med)' }}>✕</button>
+        </div>
+
+        {state.loading && <div style={{ padding: 30, textAlign: 'center', color: 'var(--med)' }}>문제를 가져오는 중...</div>}
+        {!state.loading && state.error && <div className="notice">{state.error}</div>}
+
+        {!state.loading && !state.error && phase === 'done' && (
+          <div style={{ textAlign: 'center', padding: '26px 8px' }}>
+            <div style={{ fontSize: 44 }}>🎉</div>
+            <div style={{ fontWeight: 800, fontSize: 19, color: 'var(--navy)', margin: '10px 0 6px' }}>리딩 숙제 끝!</div>
+            {state.questions.length > 0 && (
+              <div style={{ color: 'var(--med)', fontSize: 15 }}>처음에 바로 맞힌 문제: {score} / {state.questions.length}</div>
+            )}
+            {state.questions.length === 0 && (
+              <div style={{ color: 'var(--med)', fontSize: 15 }}>이 유닛은 이미 다 풀었어! 멋지다 ⭐</div>
+            )}
+            <button onClick={onClose} className="btn" style={{ marginTop: 18 }}>닫기</button>
+          </div>
+        )}
+
+        {!state.loading && !state.error && q && phase !== 'done' && (
+          <>
+            <div style={{ fontSize: 13, color: 'var(--light)', marginBottom: 8 }}>{state.idx + 1} / {state.questions.length} 문제</div>
+            <div style={{ background: 'var(--card, #f6f7fb)', padding: 16, borderRadius: 12, fontSize: 15, lineHeight: 1.85, marginBottom: 14 }}>{q.지문}</div>
+            <div style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 16, marginBottom: 12 }}>{q.질문}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {q.보기.map((opt, i) => (
+                <button key={i} style={optionStyle(i)} onClick={() => choose(i)}>
+                  {i + 1}. {opt}
+                </button>
+              ))}
+            </div>
+
+            {phase === 'hint' && (
+              <div style={{ marginTop: 14, background: '#fff9e6', border: '2px solid var(--yellow)', borderRadius: 12, padding: 14, fontSize: 15, lineHeight: 1.7 }}>
+                {aiLoading ? '🤔 선생님이 생각 중...' : <><b>🤔 다시 생각해 보자!</b><br />{aiText}<br /><span style={{ color: 'var(--med)', fontSize: 13 }}>지문을 다시 읽고 한 번 더 골라봐!</span></>}
+              </div>
+            )}
+            {phase === 'correct' && (
+              <div style={{ marginTop: 14, background: '#effaf8', border: '2px solid var(--teal)', borderRadius: 12, padding: 14, fontSize: 15, fontWeight: 700, color: 'var(--navy)' }}>
+                {PRAISES[(state.idx + (profile.이름 || '').length) % PRAISES.length]}
+                <button onClick={next} className="btn" style={{ marginTop: 12 }}>
+                  {state.idx + 1 >= state.questions.length ? '결과 보기' : '다음 문제 →'}
+                </button>
+              </div>
+            )}
+            {phase === 'explain' && (
+              <div style={{ marginTop: 14, background: '#f3e8ff', border: '2px solid var(--purple, #8b5cf6)', borderRadius: 12, padding: 14, fontSize: 15, lineHeight: 1.7 }}>
+                {aiLoading ? '📖 선생님이 설명을 준비 중...' : <><b>📖 같이 풀어보자</b><br />{aiText}</>}
+                {!aiLoading && (
+                  <button onClick={next} className="btn" style={{ marginTop: 12 }}>
+                    {state.idx + 1 >= state.questions.length ? '결과 보기' : '다음 문제 →'}
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HomeworkLine({ item, checkKey, onReadingQuiz }) {
   const { emoji, text } = splitLeadingEmoji(item.title);
   const [checked, setChecked] = useState(() => (checkKey ? !!loadSelfChecks()[checkKey] : false));
 
@@ -795,6 +982,18 @@ function HomeworkLine({ item, checkKey }) {
     </>
   );
 
+  // 사이트 리딩 숙제 — 새 탭이 아니라 문제 풀기 화면을 연다
+  if (item.link && item.link.startsWith('reading-quiz://')) {
+    const [book, unit] = item.link.replace('reading-quiz://', '').split('@');
+    return (
+      <button className="card" style={{ width: '100%', textAlign: 'left', border: 'none', cursor: 'pointer' }}
+        onClick={() => onReadingQuiz && onReadingQuiz({ book, unit: parseInt(unit, 10) })}>
+        {inner}
+        {checkBtn}
+        <div className="card-arrow">→</div>
+      </button>
+    );
+  }
   if (item.link) {
     return (
       <a href={item.link} target="_blank" rel="noopener noreferrer" className="card">
@@ -815,7 +1014,7 @@ function HomeworkLine({ item, checkKey }) {
 // ===== 홈 화면 컴포넌트 =====
 function HomeScreen({
   profile, myClasses, unmatchedNames, statuses, makeupVideos, now, pointsLink, kakaoLink,
-  onEnterZoom, onOpenConcept, onOpenCode, onFindClass, onResetProfile,
+  onEnterZoom, onOpenConcept, onOpenCode, onFindClass, onResetProfile, onOpenReading,
   codePopup, setCodePopup, codeInput, setCodeInput, codeResult, myName, submitCode,
 }) {
   const ongoingClasses = myClasses.filter((c) => c.status === '진행중');
@@ -912,6 +1111,7 @@ function HomeScreen({
                 cls={c}
                 onOpenConcept={onOpenConcept}
                 onOpenCode={onOpenCode}
+                onOpenReading={onOpenReading}
               />
             ))}
           </div>
@@ -1054,7 +1254,7 @@ function ZoomTroubleHint() {
   );
 }
 
-function ClassSection({ cls, onOpenConcept, onOpenCode }) {
+function ClassSection({ cls, onOpenConcept, onOpenCode, onOpenReading }) {
   const dayOffset = daysSinceLastClass(cls);
   const hw = filterHomeworkByDay(cls['숙제범위'], dayOffset, lastClassDate(cls));
   const session = cls.sessions || cls['현재회차'] || '';
@@ -1101,7 +1301,8 @@ function ClassSection({ cls, onOpenConcept, onOpenCode }) {
         );
       })()}
       {hw.visible.map((item, i) => (
-        <HomeworkLine key={keyFor(item.title)} item={item} checkKey={keyFor(item.title)} />
+        <HomeworkLine key={keyFor(item.title)} item={item} checkKey={keyFor(item.title)}
+          onReadingQuiz={(q) => onOpenReading && onOpenReading({ ...q, cls, session })} />
       ))}
 
       {hw.locked.length > 0 && (

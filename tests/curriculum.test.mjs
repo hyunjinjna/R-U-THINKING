@@ -19,20 +19,23 @@ assert.equal(findSetLink(SETS, '없는 세트'), '');
 // ---- 리딩: 당일 2개 + D+1 2개, 전부 파싱 가능 형식 ----
 const reading = buildAutoHomework({ category: '리딩', textbook: 'Easy Link 5', unit: 3, sets: SETS });
 const rLines = reading.split('\n');
-assert.equal(rLines.length, 4);
+assert.equal(rLines.length, 5);
 const r0 = parseHomeworkLine(rLines[0]);
 assert.equal(r0.link, 'https://cc/u3');
 assert.equal(r0.requiredDay, null); // 당일
 assert.ok(r0.title.includes('두 바퀴'));
-assert.equal(parseHomeworkLine(rLines[1]).link, 'https://cc/u3wb');
-const r2 = parseHomeworkLine(rLines[2]);
+const rq = parseHomeworkLine(rLines[1]);
+assert.equal(rq.link, 'reading-quiz://Easy Link 5@3'); // 사이트 리딩 문제 (내부 링크)
+assert.ok(rq.title.includes('리딩 문제'));
+assert.equal(parseHomeworkLine(rLines[2]).link, 'https://cc/u3wb');
+const r2 = parseHomeworkLine(rLines[3]);
 assert.equal(r2.link, 'https://cc/u2');
 assert.equal(r2.requiredDay, 1); // D+1 매칭
-assert.equal(parseHomeworkLine(rLines[3]).requiredDay, 1); // D+1 스피킹
+assert.equal(parseHomeworkLine(rLines[4]).requiredDay, 1); // D+1 스피킹
 
 // ---- 리딩 1회차: 복습(매칭) 없음 → 3개 ----
 const reading1 = buildAutoHomework({ category: '리딩', textbook: 'Easy Link 5', unit: 1, sets: SETS });
-assert.equal(reading1.split('\n').length, 3);
+assert.equal(reading1.split('\n').length, 4); // 리딩 문제 항목 포함
 assert.ok(!reading1.includes('매칭'));
 
 // ---- 단어: 당일 암기+스피킹 / D+1 매칭+드릴 ----
