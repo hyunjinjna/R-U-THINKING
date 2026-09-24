@@ -237,7 +237,7 @@ export async function POST(request) {
     const 학생 = String(enrollment['학생 이름'] || '').trim();
     const 학부모 = String(enrollment['학부모 이름'] || '').trim();
     const 문구 = [
-      `[R U Thinking?] ${학부모 ? 학부모 + ' 학부모님' : '학부모님'}, 안녕하세요 😊`,
+      `[알유띵킹 어학원] ${학부모 ? 학부모 + ' 학부모님' : '학부모님'}, 안녕하세요 😊`,
       '',
       `${학생} 학생의 등록 신청 잘 받았습니다!`,
       '',

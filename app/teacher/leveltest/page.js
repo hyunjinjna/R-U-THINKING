@@ -32,8 +32,11 @@ export default function TeacherLevelTestPage() {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    // 복사하면 발송여부 자동 처리 (되돌리기 버튼 제공)
-    if (selected && !isDemo) markSent(selected, '완료');
+    // 복사하면 발송여부 자동 처리 + 목록에서도 즉시 제거 (되돌리기 누르면 다시 살아남)
+    if (selected && !isDemo) {
+      markSent(selected, '완료');
+      setResults((list) => list.filter((x) => x !== selected));
+    }
   };
 
   const markSent = async (row, value) => {
@@ -88,7 +91,7 @@ ${link}`;
           <div className="notice" style={{ marginTop: 8, fontSize: 12 }}>
             {marked}
             {marked.startsWith('발송 처리됨') && (
-              <button onClick={() => markSent(selected, '')} style={{ marginLeft: 8, background: 'none', border: 0, color: 'var(--navy)', textDecoration: 'underline', cursor: 'pointer' }}>되돌리기</button>
+              <button onClick={() => { markSent(selected, ''); setResults((list) => (list.includes(selected) ? list : [selected, ...list])); }} style={{ marginLeft: 8, background: 'none', border: 0, color: 'var(--navy)', textDecoration: 'underline', cursor: 'pointer' }}>되돌리기</button>
             )}
           </div>
         )}
@@ -100,7 +103,12 @@ ${link}`;
         </a>
 
         <button className="btn btn-outline" style={{ marginTop: 10 }}
-          onClick={() => { if (!isDemo) markSent(selected, '완료'); }}>
+          onClick={() => {
+            if (isDemo) return;
+            markSent(selected, '완료');
+            setResults((list) => list.filter((x) => x !== selected));
+            setSelected(null);
+          }}>
           ✅ 처리완료 — 목록에서 보내기
         </button>
 
@@ -140,18 +148,14 @@ ${link}`;
       ) : (
         <div className="card-list">
           {results.map((r, i) => (
-            <div key={i} className="card" style={{ cursor: 'pointer' }} onClick={() => setSelected(r)}>
+            <button key={i} className="card" onClick={() => setSelected(r)}>
               <div className="card-icon" style={{ background: 'var(--teal)', fontSize: 18 }}>📋</div>
               <div>
                 <div className="card-title">{r['전화번호']}</div>
                 <div className="card-desc">{r['제출일시']}</div>
               </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); if (!isDemo) { markSent(r, '완료'); setResults((list) => list.filter((x) => x !== r)); } }}
-                style={{ marginLeft: 'auto', border: '2px solid var(--border)', background: '#fff', borderRadius: 10, padding: '6px 10px', fontSize: 12, fontWeight: 700, color: 'var(--navy)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                완료
-              </button>
-            </div>
+              <div className="card-arrow">→</div>
+            </button>
           ))}
         </div>
       )}

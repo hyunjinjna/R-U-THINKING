@@ -3,7 +3,7 @@ import { SHEET_URLS, DEMO_FAQ, IS_DEMO } from '../../../lib/config';
 
 export const dynamic = 'force-dynamic';
 
-const SYSTEM = `너는 R U Thinking? 영어 학원의 학부모 응대 도우미야.
+const SYSTEM = `너는 알유띵킹 어학원의 학부모 응대 도우미야.
 학부모님이 보내신 질문에 대해, 코치가 카카오톡으로 보낼 답변 초안을 작성해줘.
 
 ## 톤 & 스타일

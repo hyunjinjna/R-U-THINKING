@@ -40,7 +40,7 @@ function assemble(c, sets, curriculumRows) {
   if (wr) {
     const units = unitsOfSessions(curriculumRows, wr.sessions, extractUnit);
     const items = buildWeekendReview({ category: c['대분류'], textbook, units, sets, curriculumRows });
-    if (items.length > 0) { out['주말리뷰'] = items; out['주말리뷰키'] = wr.satKey; }
+    if (items.length > 0) { out['주말리뷰'] = items; out['주말리뷰키'] = wr.satKey; out['주말라벨'] = wr.label; out['주말잠금'] = !!wr.locked; }
   }
   return out;
 }

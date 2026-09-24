@@ -11,6 +11,7 @@ export default function EnrollmentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [isDemo, setIsDemo] = useState(false);
+  const classesSheetLink = process.env.NEXT_PUBLIC_CLASSES_SHEET_LINK || '';
   const [selected, setSelected] = useState(null);
   const [assignments, setAssignments] = useState({});
   const [feeText, setFeeText] = useState('');
@@ -418,8 +419,20 @@ export default function EnrollmentsPage() {
                 </div>
 
                 {available.length === 0 ? (
-                  <div style={{ background: 'var(--soft-red)', color: 'var(--red)', padding: '12px 14px', borderRadius: 8, fontSize: 14, fontWeight: 700 }}>
-                    조건에 맞는 반이 없습니다 — 새 반 개설이 필요해요
+                  <div>
+                    <div style={{ background: 'var(--soft-red)', color: 'var(--red)', padding: '12px 14px', borderRadius: 8, fontSize: 14, fontWeight: 700 }}>
+                      조건에 맞는 반이 없습니다 — 새 반 개설이 필요해요
+                    </div>
+                    {classesSheetLink && (
+                      <a href={classesSheetLink} target="_blank" rel="noopener noreferrer">
+                        <button className="btn btn-outline" style={{ marginTop: 8, width: '100%' }}>
+                          📊 운영시트 열기 (새 반 만들기)
+                        </button>
+                      </a>
+                    )}
+                    <div style={{ fontSize: 12, color: 'var(--light)', marginTop: 6 }}>
+                      반을 만들고 2~3분 뒤 이 화면을 새로고침하면 목록에 나타나요.
+                    </div>
                   </div>
                 ) : (
                   <select

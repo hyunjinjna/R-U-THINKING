@@ -47,3 +47,25 @@ assert.equal(g.length, 1);
 assert.deepEqual(buildWeekendReview({ category: '리딩', textbook: 'Easy Link 4', units: [], sets }), []);
 
 console.log('weekend.test.mjs: 전부 통과');
+
+// ===== 2026-09-24 개편: 마지막 수업 후 잠금 미리보기 + 라벨 =====
+{
+  const cls = { 시작일: '2026-09-01', 수업요일: '월수', 수업시간: '18:00', 휴강기록: '' };
+  const at = (s) => weekendReviewWindow(cls, new Date(s));
+  assert(at('2026-09-23T17:00') === null, '마지막 수업 전 → 표시 안 함');
+  let r = at('2026-09-23T19:00');
+  assert(r && r.locked === true && r.label === '이번 주말 숙제', '수요일 수업 후 → 잠금 미리보기');
+  r = at('2026-09-25T23:59');
+  assert(r && r.locked === true, '금요일 밤 → 아직 잠금');
+  r = at('2026-09-26T00:10');
+  assert(r && r.locked === false && r.label === '이번 주말 숙제', '토요일 0시 → 열림 (이번 주말)');
+  r = at('2026-09-28T10:00');
+  assert(r && r.locked === false && r.label === '지난 주말 숙제', '월요일 → 지난 주말 숙제');
+  assert(at('2026-09-28T18:00') === null, '다음 수업 시작 → 종료');
+  // 화목반: 목요일 수업 종료(18:30) 후부터 잠금
+  const cls2 = { 시작일: '2026-09-01', 수업요일: '화목', 수업시간: '18:00', 휴강기록: '' };
+  assert(weekendReviewWindow(cls2, new Date('2026-09-24T18:20')) === null, '화목반 수업 중 → 아직');
+  r = weekendReviewWindow(cls2, new Date('2026-09-24T18:40'));
+  assert(r && r.locked === true, '화목반 목요일 수업 후 → 잠금 미리보기');
+}
+console.log('weekend 잠금·라벨 (2026-09-24): 전부 통과');

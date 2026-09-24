@@ -155,7 +155,7 @@ export default function ParentPage() {
   return (
     <main className="container" style={{ maxWidth: 640 }}>
       <h1 className="page-title" style={{ marginTop: 24 }}>{data.학생이름} 학습 리포트</h1>
-      <p className="page-sub">R U Thinking? · 출석과 숙제, 테스트 기록입니다.</p>
+      <p className="page-sub">알유띵킹 어학원 · 출석과 숙제, 테스트 기록입니다.</p>
 
       {weekKeys.length === 0 ? (
         <div className="empty">아직 수업 기록이 없어요. 첫 수업 후에 표시됩니다.</div>

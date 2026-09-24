@@ -4,7 +4,7 @@ function buildConceptPrompt(concept, language) {
   const isEnglish = String(language).includes('영어');
 
   if (isEnglish) {
-    return `너는 R U Thinking? 영어 학원의 "개념 설명하기" 숙제 비서야.
+    return `너는 알유띵킹 어학원의 "개념 설명하기" 숙제 비서야.
 학생이 오늘 배운 개념을 **영어로** 설명하면, 네가 듣고 확인해주는 역할이야.
 
 ## 기본 규칙
@@ -30,7 +30,7 @@ ${concept}
 - 위에 주어진 개념 외의 다른 내용을 묻지 마.`;
   }
 
-  return `너는 R U Thinking? 영어 학원의 "개념 설명하기" 숙제 비서야.
+  return `너는 알유띵킹 어학원의 "개념 설명하기" 숙제 비서야.
 학생이 오늘 배운 개념을 **한국어로** 설명하면, 네가 듣고 확인해주는 역할이야.
 
 ## 기본 규칙

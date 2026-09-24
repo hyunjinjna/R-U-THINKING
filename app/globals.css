@@ -301,3 +301,44 @@ textarea { resize: vertical; min-height: 70px; }
   color: var(--light);
   padding: 8px 0;
 }
+
+
+/* ===== 레벨테스트 보기 버튼 (2026-09-24 리뉴얼) ===== */
+.lt-opt {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  background: #fff;
+  border: 1.5px solid #E3E1D9;
+  border-radius: 12px;
+  padding: 13px 14px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--navy);
+}
+.lt-num {
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid var(--navy);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--navy);
+  flex: none;
+  background: #fff;
+}
+.lt-opt:active {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+.lt-opt:active .lt-num {
+  background: var(--yellow);
+  border-color: var(--yellow);
+  color: var(--navy);
+}

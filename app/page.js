@@ -938,9 +938,20 @@ function ReadingQuizModal({ quiz, profile, onClose }) {
   );
 }
 
-function HomeworkLine({ item, checkKey, onReadingQuiz }) {
+function HomeworkLine({ item, checkKey, onReadingQuiz, tone = 'blue', last = false }) {
   const { emoji, text } = splitLeadingEmoji(item.title);
+  // 괄호 지시사항을 회색 서브텍스트로 분리: "Unit 8 단어 암기 (두 바퀴 돌기!)" → 제목 + " · 두 바퀴 돌기!"
+  const m = text.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+  const mainText = m ? m[1] : text;
+  const subText = m ? m[2] : '';
   const [checked, setChecked] = useState(() => (checkKey ? !!loadSelfChecks()[checkKey] : false));
+
+  const TONES = {
+    teal: { ring: '#5DCAA5', divider: '#9FE1CB' },
+    blue: { ring: '#85B7EB', divider: '#B5D4F4' },
+    coral: { ring: '#F0997B', divider: '#F5C4B3' },
+  };
+  const t = TONES[tone] || TONES.blue;
 
   const toggle = (e) => {
     e.preventDefault();
@@ -953,34 +964,41 @@ function HomeworkLine({ item, checkKey, onReadingQuiz }) {
     setChecked(next);
   };
 
-  const titleStyle = {
-    fontSize: 16,
-    textDecoration: checked ? 'line-through' : 'none',
-    color: checked ? 'var(--light)' : undefined,
-  };
-
   const checkBtn = checkKey ? (
     <button
       onClick={toggle}
       title={checked ? '다시 하기로 표시' : '다 했어요!'}
       style={{
-        width: 34, height: 34, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
-        border: checked ? 'none' : '2px solid var(--border)',
-        background: checked ? 'var(--teal)' : '#fff',
-        color: '#fff', fontSize: 16, lineHeight: 1,
+        width: 30, height: 30, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
+        border: checked ? 'none' : `2px solid ${t.ring}`,
+        background: checked ? '#1D9E75' : '#fff',
+        color: '#fff', fontSize: 15, lineHeight: 1, padding: 0,
       }}
     >
       {checked ? '✓' : ''}
     </button>
   ) : null;
 
+  const rowStyle = {
+    display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+    padding: '10px 2px', textAlign: 'left', background: 'none', border: 'none',
+    borderBottom: last ? 'none' : `1px solid ${t.divider}`,
+    font: 'inherit', cursor: 'default', color: 'inherit',
+  };
+
   const inner = (
     <>
-      <div className="card-icon" style={{ background: 'var(--yellow)', color: '#fff' }}>{emoji}</div>
-      <div style={{ flex: 1 }}>
-        <div className="card-title" style={titleStyle}>{text}</div>
-        {checked && <div style={{ fontSize: 12, color: 'var(--teal)', fontWeight: 700 }}>잘했어! 🎉</div>}
-      </div>
+      <span style={{ fontSize: 18, flex: 'none', lineHeight: 1 }}>{emoji}</span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{
+          fontSize: 15.5, color: checked ? 'var(--light)' : 'var(--navy)', fontWeight: 600,
+          textDecoration: checked ? 'line-through' : 'none', wordBreak: 'keep-all',
+        }}>
+          {mainText}
+          {subText && <span style={{ fontSize: 12.5, color: 'var(--light)', fontWeight: 500 }}> · {subText}</span>}
+        </span>
+        {checked && <span style={{ display: 'block', fontSize: 12, color: '#1D9E75', fontWeight: 700 }}>잘했어! 🎉</span>}
+      </span>
     </>
   );
 
@@ -988,32 +1006,35 @@ function HomeworkLine({ item, checkKey, onReadingQuiz }) {
   if (item.link && item.link.startsWith('reading-quiz://')) {
     const [book, unit] = item.link.replace('reading-quiz://', '').split('@');
     return (
-      <button className="card" style={{ width: '100%', textAlign: 'left', border: '2px solid var(--border)', background: '#fff', font: 'inherit', cursor: 'pointer' }}
-        onClick={() => onReadingQuiz && onReadingQuiz({ book, unit: parseInt(unit, 10) })}>
-        {inner}
+      <div style={rowStyle}>
+        <button style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, background: 'none', border: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left', padding: 0, color: 'inherit' }}
+          onClick={() => onReadingQuiz && onReadingQuiz({ book, unit: parseInt(unit, 10) })}>
+          {inner}
+          <span style={{ color: t.ring, fontSize: 16, flex: 'none' }}>→</span>
+        </button>
         {checkBtn}
-        <div className="card-arrow">→</div>
-      </button>
+      </div>
     );
   }
   if (item.link) {
     return (
-      <a href={item.link} target="_blank" rel="noopener noreferrer" className="card">
-        {inner}
+      <div style={rowStyle}>
+        <a href={item.link} target="_blank" rel="noopener noreferrer"
+          style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}>
+          {inner}
+          <span style={{ color: t.ring, fontSize: 16, flex: 'none' }}>→</span>
+        </a>
         {checkBtn}
-        <div className="card-arrow">→</div>
-      </a>
+      </div>
     );
   }
   return (
-    <div className="card" style={{ cursor: 'default' }}>
+    <div style={rowStyle}>
       {inner}
       {checkBtn}
     </div>
   );
 }
-
-// ===== 홈 화면 컴포넌트 =====
 function HomeScreen({
   profile, myClasses, unmatchedNames, statuses, makeupVideos, now, pointsLink, kakaoLink,
   onEnterZoom, onOpenConcept, onOpenCode, onFindClass, onResetProfile, onOpenReading,
@@ -1084,14 +1105,13 @@ function HomeScreen({
       {/* ===== 밀린 숙제 ===== */}
       {overdue.length > 0 && (
         <>
-          <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>⚠️ 밀린 숙제</div>
+          <div className="section-label" style={{ fontSize: 16, fontWeight: 800, color: '#712B13' }}>밀린 숙제</div>
           <div className="card-list">
             {overdue.map((c) => (
-              <div key={c['반이름']} className="card" style={{ cursor: 'default', borderColor: 'var(--red)' }}>
-                <div className="card-icon" style={{ background: 'var(--red)' }}>❗</div>
+              <div key={c['반이름']} className="card" style={{ cursor: 'default', background: '#FAECE7', border: 'none' }}>
                 <div>
-                  <div className="card-title">{c['반이름']}</div>
-                  <div className="card-desc">아직 다 못한 숙제가 있어요. 아래에서 확인해줘!</div>
+                  <div className="card-title" style={{ color: '#712B13' }}>{c['반이름']}</div>
+                  <div className="card-desc" style={{ color: '#993C1D' }}>아직 다 못한 숙제가 있어요. 아래에서 확인해줘!</div>
                 </div>
               </div>
             ))}
@@ -1111,6 +1131,7 @@ function HomeScreen({
               <ClassSection
                 key={c['반이름']}
                 cls={c}
+                isOverdue={statuses[c['반이름']]?.숙제 === 'X'}
                 onOpenConcept={onOpenConcept}
                 onOpenCode={onOpenCode}
                 onOpenReading={onOpenReading}
@@ -1268,64 +1289,103 @@ function ZoomTroubleHint({ kakaoLink }) {
   );
 }
 
-function ClassSection({ cls, onOpenConcept, onOpenCode, onOpenReading }) {
+function ClassSection({ cls, onOpenConcept, onOpenCode, onOpenReading, isOverdue = false }) {
   const dayOffset = daysSinceLastClass(cls);
   const hw = filterHomeworkByDay(cls['숙제범위'], dayOffset, lastClassDate(cls));
   const session = cls.sessions || cls['현재회차'] || '';
   const keyFor = (title) => `${cls['반이름']}|${session}|${title}`;
 
-  // 반 섹션 안 큰 버튼 공통 스타일 (폰트 키우기 피드백 반영)
-  const bigChip = (bg, color) => ({
-    background: bg, color, border: 'none', cursor: 'pointer',
-    fontSize: 15, fontWeight: 700, padding: '12px 16px', borderRadius: 12,
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-  });
+  const weekendLocked = !!cls['주말잠금'];
+  const weekendLabel = cls['주말라벨'] || '주말 숙제';
+
+  // 섹션 색 블록 (B안): 주말=터콰이즈 / 수업=파랑 / 밀린=코랄
+  const block = (bg) => ({ background: bg, borderRadius: 12, padding: '10px 12px', marginBottom: 10 });
+  const blockHeader = (color) => ({ fontSize: 13, fontWeight: 800, color, margin: '0 0 2px' });
+
+  // 하단 버튼: 흰 배경 + 테두리 통일
+  const chip = {
+    background: '#fff', border: '2px solid var(--border)', color: 'var(--navy)', cursor: 'pointer',
+    fontSize: 14, fontWeight: 700, padding: '11px 15px', borderRadius: 12,
+    display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none', font: 'inherit',
+  };
+
+  const classDate = lastClassDate(cls);
+  const classLabel = classDate
+    ? `${classDate.getMonth() + 1}/${classDate.getDate()} (${['일','월','화','수','목','금','토'][classDate.getDay()]}) 수업 숙제`
+    : '수업 숙제';
 
   return (
-    <div style={{ border: '2px solid var(--border)', borderRadius: 14, padding: 16 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <span className="tag" style={{ fontSize: 13, padding: '4px 11px' }}>{cls['대분류'] || '수업'}</span>
+    <div style={{ border: '2px solid var(--border)', borderRadius: 14, padding: 16, background: '#fff' }}>
+      {/* 반 헤더 한 줄: 반이름 + 과목·진도 작게 */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 18 }}>{cls['반이름']}</span>
+        <span style={{ fontSize: 12.5, color: 'var(--light)' }}>
+          {cls['대분류'] || '수업'}{cls['진도'] ? ` · ${cls['진도']}` : ''}
+        </span>
       </div>
-      {cls['진도'] && <div style={{ fontSize: 14, color: 'var(--med)', marginBottom: 10 }}>{cls['진도']}</div>}
 
-      {hw.visible.length === 0 && hw.locked.length === 0 && (
+      {hw.visible.length === 0 && hw.locked.length === 0 && !(cls['주말리뷰'] && cls['주말리뷰'].length > 0) && (
         <div style={{ fontSize: 15, color: 'var(--light)', marginBottom: 6 }}>오늘 확인할 숙제가 없어요.</div>
       )}
 
-      {cls['주말리뷰'] && cls['주말리뷰'].length > 0 && (
-        <>
-          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--teal)', margin: '2px 0 4px' }}>
-            🎉 주말 숙제 — 이번 주 배운 것 복습해요!
+      {/* 밀린 숙제 — 코랄 */}
+      {isOverdue && (
+        <div style={block('#FAECE7')}>
+          <div style={blockHeader('#712B13')}>
+            밀린 숙제 <span style={{ fontWeight: 600, color: '#993C1D' }}>— 다음 수업 전까지!</span>
           </div>
-          {cls['주말리뷰'].map((item) => {
-            const wk = `${cls['반이름']}|주말${cls['주말리뷰키'] || ''}|${item.title}`;
-            return <HomeworkLine key={wk} item={item} checkKey={wk} />;
-          })}
-        </>
+          <div style={{ fontSize: 13.5, color: '#993C1D', padding: '6px 2px 2px', wordBreak: 'keep-all' }}>
+            지난 회차에 아직 다 못한 숙제가 있어요. 아래 숙제와 함께 마저 끝내요!
+          </div>
+        </div>
       )}
 
-      {hw.visible.length > 0 && (() => {
-        const d = lastClassDate(cls);
-        const label = d ? `${d.getMonth() + 1}/${d.getDate()} (${['일','월','화','수','목','금','토'][d.getDay()]}) 수업 숙제` : '수업 숙제';
-        return (
-          <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--navy)', margin: '6px 0 4px' }}>
-            📚 {label}
-          </div>
-        );
-      })()}
-      {hw.visible.map((item, i) => (
-        <HomeworkLine key={keyFor(item.title)} item={item} checkKey={keyFor(item.title)}
-          onReadingQuiz={(q) => onOpenReading && onOpenReading({ ...q, cls, session })} />
-      ))}
+      {/* 주말 숙제 — 터콰이즈 (마지막 수업 후 표시, 금요일까지 잠금) */}
+      {cls['주말리뷰'] && cls['주말리뷰'].length > 0 && (
+        <div style={block('#E1F5EE')}>
+          <div style={blockHeader('#085041')}>{weekendLabel}</div>
+          {weekendLocked ? (
+            cls['주말리뷰'].map((item, idx) => {
+              const { emoji, text } = splitLeadingEmoji(item.title);
+              return (
+                <div key={idx} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 2px',
+                  borderBottom: idx === cls['주말리뷰'].length - 1 ? 'none' : '1px solid #9FE1CB',
+                  color: 'var(--light)', fontSize: 15,
+                }}>
+                  <span style={{ fontSize: 16, flex: 'none' }}>🔒</span>
+                  <span style={{ flex: 1, wordBreak: 'keep-all' }}>{emoji} {text}</span>
+                  <span style={{ fontSize: 12.5, flex: 'none' }}>토요일에 열려요</span>
+                </div>
+              );
+            })
+          ) : (
+            cls['주말리뷰'].map((item, idx) => {
+              const wk = `${cls['반이름']}|주말${cls['주말리뷰키'] || ''}|${item.title}`;
+              return <HomeworkLine key={wk} item={item} checkKey={wk} tone="teal" last={idx === cls['주말리뷰'].length - 1} />;
+            })
+          )}
+        </div>
+      )}
 
-      {hw.locked.length > 0 && (
-        <div style={{ marginTop: 4 }}>
+      {/* 수업 숙제 — 파랑 */}
+      {(hw.visible.length > 0 || hw.locked.length > 0) && (
+        <div style={block('#E6F1FB')}>
+          <div style={blockHeader('#0C447C')}>{classLabel}</div>
+          {hw.visible.map((item, i) => (
+            <HomeworkLine key={keyFor(item.title)} item={item} checkKey={keyFor(item.title)} tone="blue"
+              last={i === hw.visible.length - 1 && hw.locked.length === 0}
+              onReadingQuiz={(q) => onOpenReading && onOpenReading({ ...q, cls, session })} />
+          ))}
           {hw.locked.map((l, i) => (
-            <div key={i} className="locked-item" style={{ padding: '6px 0', fontSize: 15 }}>
-              <span>🔒</span>
-              <span>{l.title}</span>
-              <span style={{ marginLeft: 'auto', fontSize: 13 }}>
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 2px',
+              borderBottom: i === hw.locked.length - 1 ? 'none' : '1px solid #B5D4F4',
+              color: 'var(--light)', fontSize: 15,
+            }}>
+              <span style={{ fontSize: 16, flex: 'none' }}>🔒</span>
+              <span style={{ flex: 1, wordBreak: 'keep-all' }}>{l.title}</span>
+              <span style={{ fontSize: 12.5, flex: 'none' }}>
                 {l.opensWeekday ? `${l.opensWeekday}요일에 열려요` : `${l.opensAt}일 뒤 열림`}
               </span>
             </div>
@@ -1333,20 +1393,21 @@ function ClassSection({ cls, onOpenConcept, onOpenCode, onOpenReading }) {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 14 }}>
+      {/* 하단 버튼 — 시크릿코드·필기 인증샷 (흰 배경+테두리 통일) */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
         {cls['개념설명숙제'] && (
-          <button onClick={() => onOpenConcept(cls)} style={bigChip('#f3e8ff', 'var(--purple)')}>
+          <button onClick={() => onOpenConcept(cls)} style={chip}>
             🗣️ 개념 설명하기
           </button>
         )}
         {cls['시크릿코드'] && cls.status === '진행중' && (
-          <button onClick={() => onOpenCode(cls)} style={bigChip('#f3e8ff', 'var(--purple)')}>
+          <button onClick={() => onOpenCode(cls)} style={chip}>
             🔑 시크릿코드
           </button>
         )}
         {cls['필기인증링크'] && (
-          <a href={cls['필기인증링크']} target="_blank" rel="noopener noreferrer" style={bigChip('#ffe4ec', '#d6336c')}>
-            📸 필기 인증샷
+          <a href={cls['필기인증링크']} target="_blank" rel="noopener noreferrer" style={chip}>
+            📷 필기 인증샷
           </a>
         )}
       </div>

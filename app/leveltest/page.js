@@ -112,6 +112,13 @@ function QuestionMedia({ q }) {
 
 export default function LevelTestPage() {
   const [stage, setStage] = useState('intro');
+
+  // 레벨테스트 전용 크림 배경
+  useEffect(() => {
+    const prev = document.body.style.background;
+    document.body.style.background = '#FBF9F3';
+    return () => { document.body.style.background = prev; };
+  }, []);
   const [entryType, setEntryType] = useState(null);
   const [bookCategory, setBookCategory] = useState(null);
 
@@ -153,13 +160,25 @@ export default function LevelTestPage() {
     return () => clearInterval(timerRef.current);
   }, [stage, phonicsIdx, adaptiveSession?.history?.length]);
 
+  // ===== 시작 안내 화면 (A·B 공통, 첫 문제 직전) =====
+  const [afterGuide, setAfterGuide] = useState(null); // 'phonics' | {book: cat}
+
   // ===== A: 종합 시작 =====
   const startComprehensive = async () => {
     setEntryType('A');
     setLoading(true);
     await loadQuestions('phonics');
     setLoading(false);
-    setStage('phonics');
+    setAfterGuide('phonics');
+    setStage('guide');
+  };
+
+  const beginFromGuide = async () => {
+    if (afterGuide === 'phonics') {
+      setStage('phonics');
+    } else if (afterGuide && afterGuide.book) {
+      await beginBookTest(afterGuide.book);
+    }
   };
 
   // ===== B: 교재 선택 흐름 =====
@@ -173,7 +192,12 @@ export default function LevelTestPage() {
     setStage('bookList');
   };
 
-  const pickBook = async (cat) => {
+  const pickBook = (cat) => {
+    setAfterGuide({ book: cat });
+    setStage('guide');
+  };
+
+  const beginBookTest = async (cat) => {
     const subject = BOOK_CATEGORIES[cat].subject;
     setLoading(true);
     await loadQuestions(subject);
@@ -348,68 +372,98 @@ export default function LevelTestPage() {
     return <main className="container"><div className="empty">불러오는 중...</div></main>;
   }
 
-  // ----- 인트로 -----
+  // ----- 인트로 (2026-09-24 리뉴얼 확정안) -----
   if (stage === 'intro') {
     return (
       <main className="container">
-        <div className="logo-row">
-          <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
-          <span className="badge">R U Thinking?</span>
-        </div>
-        <h1 className="page-title">무료 영어 레벨테스트</h1>
+        <LogoLockup withSub />
+
+        <h1 className="page-title" style={{ marginTop: 18 }}>무료 영어 레벨테스트</h1>
         <p className="page-sub" style={{ fontSize: 15, lineHeight: 1.7 }}>
           대치동 상위 1% 선생님이 설계한 정밀 진단
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-          <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999 }}>⏱ 약 5~10분</span>
-          <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999 }}>📋 진단 리포트 카톡 발송</span>
+          <span style={{ background: '#fff', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999 }}>⏱ 약 5~10분</span>
+          <span style={{ background: '#fff', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999 }}>📋 진단 리포트 카톡 발송</span>
         </div>
 
-        <div className="card-list" style={{ marginTop: 20 }}>
-          <button className="card" onClick={startComprehensive}>
-            <div className="card-icon" style={{ background: 'var(--navy)' }}>A</div>
-            <div>
-              <div className="card-title">종합 레벨테스트</div>
-              <div className="card-desc">우리 아이 영어 실력을 전체적으로 확인하고 싶어요</div>
-            </div>
-            <div className="card-arrow">→</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 22 }}>
+          <button onClick={startComprehensive}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', background: 'var(--navy)', border: 'none', borderRadius: 14, padding: '16px 15px', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
+            <span style={{ width: 32, height: 32, background: 'var(--yellow)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, color: 'var(--navy)', flex: 'none' }}>A</span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 16, fontWeight: 800, color: '#fff' }}>종합 레벨테스트</span>
+              <span style={{ display: 'block', fontSize: 12, color: '#AFA9EC', marginTop: 2, lineHeight: 1.5 }}>우리 아이 영어 실력을 전체적으로<br />확인하고 싶어요</span>
+            </span>
+            <span style={{ marginLeft: 'auto', color: 'var(--yellow)', fontSize: 17, flex: 'none' }}>→</span>
           </button>
-          <button className="card" onClick={startByBook}>
-            <div className="card-icon" style={{ background: 'var(--teal)' }}>B</div>
-            <div>
-              <div className="card-title">어떤 교재를 들을지 이미 정하고 왔어요</div>
-            </div>
-            <div className="card-arrow">→</div>
+
+          <button onClick={startByBook}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', background: '#EEF0FA', border: '1.5px solid var(--navy)', borderRadius: 14, padding: '16px 15px', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
+            <span style={{ width: 32, height: 32, background: 'var(--navy)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, color: 'var(--yellow)', flex: 'none' }}>B</span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 16, fontWeight: 800, color: 'var(--navy)' }}>교재를 정하고 왔어요</span>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--med)', marginTop: 2, wordBreak: 'keep-all' }}>그 교재 영역만 빠르게 진단해요</span>
+            </span>
+            <span style={{ marginLeft: 'auto', color: 'var(--navy)', fontSize: 17, flex: 'none' }}>→</span>
           </button>
         </div>
 
         {/* --- 스크롤 설득 구간 --- */}
         <div className="section-label" style={{ marginTop: 34 }}>이런 리포트를 받아요</div>
-        <div style={{ border: '2px solid var(--border)', borderRadius: 16, padding: 18, background: '#fff' }}>
-          <div style={{ background: 'var(--navy)', color: '#fff', borderRadius: 12, padding: '12px 14px', fontSize: 13, lineHeight: 1.7, wordBreak: 'keep-all' }}>
-            읽기 자체는 되는데, 문장 속 <b>지시어가 무엇을 가리키는지</b> 놓치는 순간 흐름을 잃습니다.
-            이 구멍부터 메우면 리딩이 한 단계 올라갑니다.
+        <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 14, background: '#fff' }}>
+          <div style={{ background: '#E1F5EE', borderRadius: 10, padding: '12px 13px', fontSize: 13, lineHeight: 1.75, color: '#04342C', wordBreak: 'keep-all', marginBottom: 8 }}>
+            문장은 다 해석하는데, 다 읽고 나면 &lsquo;그래서 무슨 이야기였는지&rsquo;를 말하지 못합니다.
+            나무만 보고 숲을 못 보는 겁니다. 이 구멍부터 메우면 긴 지문이 한 덩어리로 읽힙니다.
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-            <span style={{ background: 'var(--soft-red, #fdeef0)', color: 'var(--red)', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>지시어 이해 부족</span>
-            <span style={{ background: 'var(--soft-red, #fdeef0)', color: 'var(--red)', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>유사 단어 혼동</span>
-            <span style={{ background: '#effaf8', color: 'var(--teal)', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>추천 반까지 콕</span>
+          <div style={{ background: '#FAEEDA', borderRadius: 10, padding: '12px 13px', fontSize: 13, lineHeight: 1.75, color: '#412402', wordBreak: 'keep-all', marginBottom: 8 }}>
+            단어를 몰라서 틀리는 게 아닙니다. exciting과 excited처럼 비슷한 단어에서 무너집니다.
+            암기의 양이 아니라 정확도의 문제 — 이 구멍부터 메우면 단어 시험 점수가 실전 점수로 바뀝니다.
           </div>
-          <div style={{ fontSize: 12, color: 'var(--med)', marginTop: 10, lineHeight: 1.6, wordBreak: 'keep-all' }}>
-            점수만 드리지 않습니다. 어디가 뚫려 있는지 찾아내고, 그 구멍을 메우는 반을 추천해 드려요.
+          <div style={{ background: '#FBEAF0', borderRadius: 10, padding: '12px 13px', fontSize: 13, lineHeight: 1.75, color: '#4B1528', wordBreak: 'keep-all', marginBottom: 12 }}>
+            문법 설명을 들으면 다 아는데 혼자 풀면 틀립니다. 개념과 문제 풀이가 따로 노는 상태입니다.
+            부족한 건 이해가 아니라 적용 훈련량 — 그걸 채우는 게 이 반이 하는 일입니다.
           </div>
+          {['점수 뒤에 숨은 \'구멍\' 진단', '줄리아 선생님의 처방 코멘트', '그 구멍을 메워줄 추천 반'].map((t) => (
+            <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '7px 2px' }}>
+              <span style={{ width: 20, height: 20, background: '#EEF0FA', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--navy)', fontSize: 11, flex: 'none' }}>✓</span>
+              <span style={{ fontSize: 13.5, wordBreak: 'keep-all' }}>{t}</span>
+            </div>
+          ))}
         </div>
 
-        <div className="section-label" style={{ marginTop: 26 }}>이 레벨테스트는 Julia 선생님이 직접 진단합니다</div>
-        <div style={{ border: '2px solid var(--border)', borderRadius: 16, padding: 18, background: '#fff', fontSize: 14, lineHeight: 1.8, color: 'var(--navy)', wordBreak: 'keep-all' }}>
+        <div className="section-label" style={{ marginTop: 26 }}>이 레벨테스트는 줄리아 선생님이 직접 진단합니다</div>
+        <div style={{ border: '1px solid var(--border)', borderRadius: 16, padding: 15, background: '#fff', fontSize: 13.5, lineHeight: 1.8, wordBreak: 'keep-all' }}>
           문제 설계부터 결과 판독까지 — 대치동에서 200명이 넘는 아이들을 1:1로 가르치며
-          구멍을 찾아 메워온 Julia 선생님이 직접 만들고, 제출된 테스트를 직접 확인해
+          구멍을 찾아 메워온 줄리아 선생님이 직접 만들고, 제출된 테스트를 직접 확인해
           리포트를 보내드립니다.
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-            <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 999 }}>미국 유학 10년</span>
-            <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 999 }}>대치동 1:1 지도 200명+</span>
-            <span style={{ background: '#f1f3f8', color: 'var(--navy)', fontSize: 12, fontWeight: 700, padding: '5px 11px', borderRadius: 999 }}>김과외 상위 0.02%</span>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 11 }}>
+            <span style={{ background: '#FBF9F3', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>미국 유학 10년</span>
+            <span style={{ background: '#FBF9F3', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>대치동 1:1 지도 200명+</span>
+            <span style={{ background: '#FBF9F3', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>김과외 상위 0.02%</span>
           </div>
+        </div>
+      </main>
+    );
+  }
+
+  // ----- 시작 안내 화면 (A·B 공통) -----
+  if (stage === 'guide') {
+    return (
+      <main className="container">
+        <LogoLockup />
+        <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 16, padding: '26px 20px', marginTop: 26, textAlign: 'center' }}>
+          <div style={{ fontSize: 21, fontWeight: 800, color: 'var(--navy)', marginBottom: 14 }}>레벨테스트를 시작합니다</div>
+          <p style={{ fontSize: 14.5, lineHeight: 1.9, color: 'var(--navy)', wordBreak: 'keep-all', margin: 0 }}>
+            처음에는 문제가 쉽게 느껴질 수 있어요.<br />
+            풀수록 아이의 실력에 맞춰 문제가 조절됩니다.
+          </p>
+          <p style={{ fontSize: 13, lineHeight: 1.8, color: 'var(--med)', wordBreak: 'keep-all', margin: '12px 0 0' }}>
+            중간에 어려운 문제가 나와도 괜찮아요 —<br />틀리는 것도 진단의 일부입니다.
+          </p>
+          <button className="btn" style={{ marginTop: 22, width: '100%' }} onClick={beginFromGuide} disabled={loading}>
+            {loading ? '준비 중...' : '시작하기'}
+          </button>
         </div>
       </main>
     );
@@ -488,20 +542,17 @@ export default function LevelTestPage() {
     const q = currentQuestion;
     return (
       <main className="container">
-        <div style={{ textAlign: 'right', fontWeight: 800, color: timer <= 10 ? 'var(--red)' : 'var(--navy)', fontSize: 22, marginBottom: 24 }}>
-          {timer}초
-        </div>
-        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--navy)', marginBottom: 20, lineHeight: 1.6 }}>
+        <QuizTopBar timer={timer} />
+        <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--navy)', marginBottom: 18, lineHeight: 1.6, wordBreak: 'keep-all' }}>
           {q['질문']}
         </div>
         <QuestionMedia q={q} />
-        <div className="card-list">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {[1, 2, 3, 4].map((n) => (
-            <button key={n} className="card" onClick={() => answerPhonics(Number(q['정답번호']) === n)}>
-              <div className="card-title" style={{ fontSize: 17 }}>{q[`보기${n}`]}</div>
-            </button>
+            <OptionBtn key={n} n={n} text={q[`보기${n}`]} onClick={() => answerPhonics(Number(q['정답번호']) === n)} />
           ))}
         </div>
+        <div style={{ fontSize: 12, color: 'var(--light)', textAlign: 'center', marginTop: 16 }}>천천히 읽고 골라도 괜찮아요</div>
       </main>
     );
   }
@@ -511,25 +562,22 @@ export default function LevelTestPage() {
     const q = currentQuestion;
     return (
       <main className="container">
-        <div style={{ textAlign: 'right', fontWeight: 800, color: timer <= 10 ? 'var(--red)' : 'var(--navy)', fontSize: 22, marginBottom: 24 }}>
-          {timer}초
-        </div>
+        <QuizTopBar timer={timer} />
         {q['지문'] && (
-          <div style={{ background: 'var(--card)', padding: 18, borderRadius: 12, marginBottom: 22, fontSize: 16, lineHeight: 1.85 }}>
+          <div style={{ background: '#fff', borderLeft: '3px solid var(--navy)', borderRadius: '0 10px 10px 0', padding: '14px 15px', marginBottom: 18, fontSize: 15, lineHeight: 1.85 }}>
             {q['지문']}
           </div>
         )}
-        <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--navy)', marginBottom: 20, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 19, fontWeight: 700, color: 'var(--navy)', marginBottom: 18, lineHeight: 1.6, wordBreak: 'keep-all' }}>
           {q['질문'] || q['문장']}
         </div>
         <QuestionMedia q={q} />
-        <div className="card-list">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
           {[1, 2, 3, 4].map((n) => (
-            <button key={n} className="card" onClick={() => answerAdaptive(n)}>
-              <div className="card-title" style={{ fontSize: 17 }}>{q[`보기${n}`]}</div>
-            </button>
+            <OptionBtn key={n} n={n} text={q[`보기${n}`]} onClick={() => answerAdaptive(n)} />
           ))}
         </div>
+        <div style={{ fontSize: 12, color: 'var(--light)', textAlign: 'center', marginTop: 16 }}>천천히 읽고 골라도 괜찮아요</div>
       </main>
     );
   }
@@ -597,5 +645,61 @@ export default function LevelTestPage() {
     <main className="container">
       <div className="empty">문제를 불러오지 못했어요. 새로고침 해주세요.</div>
     </main>
+  );
+}
+
+
+// ===== 레벨테스트 리뉴얼 공용 컴포넌트 (2026-09-24) =====
+
+// 로고 락업 — 로고와 학원 이름은 왼쪽 정렬로 붙임. 두 줄 양끝은 자간으로 맞춤 (튀어나오는 줄 없게)
+function LogoLockup({ withSub = false }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9, justifyContent: 'flex-start' }}>
+      <img src="/logo.png" alt="알유띵킹 어학원" style={{ width: withSub ? 46 : 36, height: withSub ? 46 : 36, flex: 'none' }} />
+      <span style={{ display: 'inline-block' }}>
+        <span style={{ display: 'block', fontSize: withSub ? 17.5 : 15, fontWeight: 800, color: 'var(--navy)', letterSpacing: withSub ? '0.115em' : 0, marginRight: withSub ? '-0.115em' : 0, lineHeight: 1.25, whiteSpace: 'nowrap' }}>알유띵킹 어학원</span>
+        {withSub && (
+          <span style={{ display: 'block', fontSize: 13, color: 'var(--light)', marginTop: 2, lineHeight: 1.2, whiteSpace: 'nowrap' }}>관리형 온라인 영어학원</span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+// 문제 화면 상단: 락업 + 타이머 링
+function QuizTopBar({ timer }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <LogoLockup />
+      <TimerRing timer={timer} />
+    </div>
+  );
+}
+
+// 원형 타이머: 노란 링이 시간 따라 줄어들고 10초 이하 코랄
+function TimerRing({ timer }) {
+  const R = 19;
+  const C = 2 * Math.PI * R;
+  const ratio = Math.max(0, Math.min(1, timer / 60));
+  const danger = timer <= 10;
+  return (
+    <div style={{ position: 'relative', width: 46, height: 46, flex: 'none' }}>
+      <svg width="46" height="46" viewBox="0 0 46 46">
+        <circle cx="23" cy="23" r={R} fill="#fff" stroke="#F1EFE8" strokeWidth="4" />
+        <circle cx="23" cy="23" r={R} fill="none" stroke={danger ? 'var(--pink)' : 'var(--yellow)'} strokeWidth="4"
+          strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - ratio)} transform="rotate(-90 23 23)" />
+      </svg>
+      <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, color: danger ? 'var(--pink)' : 'var(--navy)' }}>{timer}</span>
+    </div>
+  );
+}
+
+// 보기 버튼: 번호 원 + 누르는 순간 네이비 채움 (globals.css .lt-opt)
+function OptionBtn({ n, text, onClick }) {
+  return (
+    <button className="lt-opt" onClick={onClick}>
+      <span className="lt-num">{n}</span>
+      <span style={{ fontSize: 16, lineHeight: 1.5 }}>{text}</span>
+    </button>
   );
 }
