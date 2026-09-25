@@ -30,6 +30,11 @@ const SYSTEM = `너는 알유띵킹 어학원의 레벨테스트 진단 리포�
 - "이 구멍은 혼자 문제집으로는 잘 안 잡힙니다. 추천드린 반의 매 수업 어휘 확인 과정이 정확히 이 부분을 겨냥합니다."
 훈련 내용은 그 교재·영역에서 당연히 참인 수준으로만 서술해라 (지문 독해 훈련, 단어 확인, 문법 문제 풀이 등). 그 반이 실제로 하는지 알 수 없는 구체적 활동(에세이 첨삭, 1:1 통화 등)은 지어내지 마.
 
+## 파닉스 — 판정 결과와 반대로 쓰지 마
+- 데이터에 [파닉스] 줄이 있으면 그 아이는 파닉스가 아직 안 잡힌 아이다. "파닉스는 문제없다/되어 있다"라고 절대 쓰지 말고, 파닉스부터 잡아야 한다는 방향으로 총평·코멘트를 써라. 막힌 단계가 낮을수록 파닉스가 최우선이다.
+- [파닉스] 줄이 없으면 5단계를 전부 통과한 아이다. 그때만 파닉스가 되어 있다고 말할 수 있다.
+- 문법이 생략된 경우(데이터에 "문법 진단 생략" 표시) 문법 실력에 대해 아무것도 단정하지 마.
+
 ## 절대 규칙
 - 구체적 통계(%, 몇 명 중 몇 명)를 지어내지 마. 일반적 표현만 사용.
 - 데이터에 없는 내용을 지어내지 마.
@@ -68,15 +73,22 @@ export async function POST(request) {
   const sections = [];
 
   // 파닉스: 5단계 전부 통과한 아이만 섹션 제외, 그 외엔 시작 권수 추천 (2026-09-24 판별형)
+  // 2026-09-25: AI 입력에 실제 판정(막힌 단계·리딩/단어 최저 시작·문법 생략 여부)을 넘긴다 — 이전엔
+  // "구멍: 없음"만 넘어가 총평이 "파닉스 문제없음"으로 나오는 모순이 있었다.
+  const PHONICS_STAGE_NAME = { 1: '글자 소리', 2: '단모음 CVC', 3: '장모음·magic e', 4: '자음 블렌드', 5: '이중글자(sh·ch·th)' };
+  const grammarSkipped = !!results.grammarSkipped;
   if (results.phonics && !results.phonics.passed) {
     const book = Math.max(1, Math.min(5, Number(results.phonics.level) || 1));
+    const low = book <= 2;
+    const 비고 = low
+      ? `파닉스 기초를 먼저 다지는 게 우선이라 리딩·단어는 가장 쉬운 단계부터 진단했습니다.${grammarSkipped ? ' 리딩·단어가 모두 기초 단계라 문법 진단은 생략했습니다.' : ''}`
+      : `${book - 1}권까지의 소리 규칙은 잡혀 있고, ${book}권 규칙부터 연습이 필요합니다.`;
     sections.push({
       영역: '파닉스',
       구멍: [],
+      상태: `${book}단계(${PHONICS_STAGE_NAME[book] || ''})부터 못 넘김 — 파닉스가 아직 안 잡힌 상태${low ? ', 리딩·단어는 최저 단계부터 진단' : ''}${grammarSkipped ? ', 문법 진단 생략' : ''}`,
       추천반: `EFL Phonics ${book}권부터 시작`,
-      비고: book <= 2
-        ? '파닉스 기초를 먼저 다지는 게 우선이라, 리딩·단어는 가장 쉬운 단계부터 진단했고 문법 진단은 생략했습니다.'
-        : (book >= 2 ? `${book - 1}권까지의 소리 규칙은 잡혀 있고, ${book}권 규칙부터 연습이 필요합니다.` : ''),
+      비고,
     });
   }
 
@@ -108,10 +120,11 @@ export async function POST(request) {
 
   const dataText = sections
     .map((s) => {
+      if (s.영역 === '파닉스') return `[파닉스] 판정: ${s.상태} / 추천: ${s.추천반}`;
       const gapText = s.구멍.length > 0 ? `발견된 구멍: ${s.구멍.join(', ')}` : '발견된 구멍: 없음';
       return `[${s.영역}] ${gapText} / 추천 반: ${s.추천반}`;
     })
-    .join('\n');
+    .join('\n') + (grammarSkipped ? '\n[문법] 문법 진단 생략 (리딩·단어가 모두 기초 단계)' : '');
 
   let summary = '';
   let comment = '';
@@ -164,9 +177,10 @@ export async function POST(request) {
     return Response.json({ error: '요청 실패: ' + err.message });
   }
 
+  const find0 = (name) => sections.find((s) => s.영역 === name);
   // 누락 방지 — AI가 빼먹었으면 기본 문구로 채움
   if (!summary) {
-    const gapCount = sections.reduce((n, s) => n + s.구멍.length, 0);
+    const gapCount = sections.reduce((n, s) => n + s.구멍.length, 0) + (find0('파닉스') ? 1 : 0);
     summary =
       gapCount > 0
         ? '몇 가지 보완이 필요한 부분이 확인되었습니다.'

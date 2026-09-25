@@ -3,6 +3,8 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { gapDescription } from '../../../lib/gapDescriptions';
+import { normalize } from '../../../lib/utils';
+import ResultPitch from '../../components/ResultPitch';
 
 function ResultContent() {
   const params = useSearchParams();
@@ -11,6 +13,11 @@ function ResultContent() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [slots, setSlots] = useState([]); // 추천 반 월수강료용 (2026-09-25)
+
+  useEffect(() => {
+    fetch('/api/slots').then((r) => r.json()).then((j) => setSlots(j.slots || [])).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!phone) {
@@ -214,9 +221,27 @@ function ResultContent() {
             ))}
           </div>
 
+          {(() => {
+            // 설득 블록 데이터: 구멍 이름 전부 + 실제 추천 반(상담 후 안내 제외) + 운영시트 월수강료
+            const allGaps = areas.flatMap((a) => String(a.구멍 || '').split(',').map((g) => g.trim()).filter(Boolean));
+            const real = areas.map((a) => String(a.반 || '').trim()).filter((r) => r && !r.includes('상담'));
+            const feeOf = (label) => {
+              const hit = slots.find((sl) => normalize(label).includes(normalize(sl['레벨'])) || normalize(sl['레벨']).includes(normalize(label)));
+              return hit ? parseInt(String(hit['월수강료'] || '').replace(/[^0-9]/g, ''), 10) || 0 : 0;
+            };
+            return (
+              <ResultPitch
+                studentName={data['이름']}
+                gaps={[...new Set(allGaps)]}
+                recommended={real}
+                fees={real.map(feeOf)}
+              />
+            );
+          })()}
+
           <a
             href={`/register?levels=${encodeURIComponent(recommendedLevels)}`}
-            style={{ display: 'block', marginTop: 26 }}
+            style={{ display: 'block', marginTop: 14 }}
           >
             <button className="btn">추천 수업 등록하러 가기</button>
           </a>

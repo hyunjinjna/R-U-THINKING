@@ -14,3 +14,4 @@ await import('/tmp/rt/tests/weekend.test.mjs');
 await import('/tmp/rt/tests/points.test.mjs');
 await import('/tmp/rt/tests/fee.test.mjs');
 await import('/tmp/rt/tests/phonics.test.mjs');
+await import('/tmp/rt/tests/adaptive.test.mjs');

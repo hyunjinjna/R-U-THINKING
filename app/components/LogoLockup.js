@@ -20,26 +20,33 @@ export default function LogoLockup({ withSub = false }) {
       const sub = subRef.current;
       if (!top || !sub) return;
 
-      // 윗줄의 자간 0 상태 자연 폭을 잰 뒤 원복
+      // 윗줄의 자간 0 상태 '글자만의' 자연 폭을 잰 뒤 원복.
+      // (요소 폭을 재면 안 된다 — display:block이라 부모 폭(=아랫줄 폭)으로 늘어나 항상 같게 나옴)
       const prev = top.style.letterSpacing;
       top.style.letterSpacing = '0px';
-      const topW = top.getBoundingClientRect().width;
+      const range = document.createRange();
+      range.selectNodeContents(top);
+      const topW = range.getBoundingClientRect().width;
       top.style.letterSpacing = prev;
 
       const subW = sub.getBoundingClientRect().width;
       const chars = (top.textContent || '').length;
+      // letter-spacing은 글자마다 뒤에 붙으므로, 눈에 보이는 마지막 글자 끝을 아랫줄 끝에
+      // 맞추려면 (글자 수 − 1)개 간격으로 나눠야 한다. (chars로 나누면 한 칸만큼 짧게 끝남)
       if (chars > 1 && subW > topW + 0.5) {
-        setSpacing((subW - topW) / chars);
+        setSpacing((subW - topW) / (chars - 1));
       } else {
         setSpacing(0);
       }
     };
 
     compute();
-    // 웹폰트(Pretendard) 로드가 끝나면 폭이 달라지므로 재계산
+    // 웹폰트(Pretendard) 로드가 끝나면 폭이 달라지므로 재계산 (+안전망으로 한 번 더)
     if (typeof document !== 'undefined' && document.fonts?.ready) {
       document.fonts.ready.then(compute).catch(() => {});
     }
+    const t = setTimeout(compute, 800);
+    return () => clearTimeout(t);
   }, [withSub]);
 
   return (

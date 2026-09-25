@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   createAdaptiveSession,
   nextStep,
+  READING_BINS,
   isValidPhone,
   evaluatePhonicsPlacement,
 } from '../../lib/adaptive';
@@ -16,11 +17,15 @@ const VOCA_STAGES = [
   'C1-하', 'C1-중', 'C1-상', 'C2-하', 'C2-상',
 ];
 
+const SUBJECT_KO = { phonics: '파닉스', reading: '리딩', voca: '단어', grammar: '문법' };
+
+// 단계 인덱스 기준 (리딩 = 7구간 인덱스, 렉사일은 READING_BINS로 변환). step = 처음 걸음
 const SUBJECT_RANGE = {
-  reading: { min: 0, max: 950, start: 300 },
-  voca: { min: 0, max: 17, start: 3 },
-  grammar: { min: 1, max: 12, start: 4 },
+  reading: { min: 0, max: 6, start: 2, step: 2, lowStart: 0 },
+  voca: { min: 0, max: 17, start: 3, step: 4, lowStart: 0 },
+  grammar: { min: 1, max: 12, start: 4, step: 3, lowStart: 2 },
 };
+const MAX_Q = 10; // 영역당 최대 문제 수
 
 // B 진입용 대분류 → 교재 목록
 const BOOK_CATEGORIES = {
@@ -120,6 +125,7 @@ export default function LevelTestPage() {
 
   const [questions, setQuestions] = useState({});
   const [loading, setLoading] = useState(false);
+  const [bankError, setBankError] = useState(''); // 문제은행이 비었거나 열 이름이 안 맞을 때 (영역명)
   const [error, setError] = useState('');
 
   const [phonicsAnswers, setPhonicsAnswers] = useState([]);
@@ -175,6 +181,7 @@ export default function LevelTestPage() {
       const shuffled = [...pool].sort(() => Math.random() - 0.5);
       plan.push(...shuffled.slice(0, 2));
     }
+    if (plan.length === 0) { setBankError('파닉스'); return; }
     setPhonicsPlan(plan);
     setAfterGuide('phonics');
     setStage('guide');
@@ -207,10 +214,11 @@ export default function LevelTestPage() {
   const beginBookTest = async (cat) => {
     const subject = BOOK_CATEGORIES[cat].subject;
     setLoading(true);
-    await loadQuestions(subject);
+    const list = await loadQuestions(subject);
     setLoading(false);
+    if (!list || list.length === 0) { setBankError(SUBJECT_KO[subject] || subject); return; }
     const range = SUBJECT_RANGE[subject];
-    setAdaptiveSession(createAdaptiveSession(range.min, range.max, range.start));
+    setAdaptiveSession(createAdaptiveSession(range.min, range.max, range.start, range.step));
     setCurrentSubject(subject);
     setUsedIds((prev) => ({ ...prev, [subject]: [] }));
     setStage('adaptive');
@@ -235,7 +243,7 @@ export default function LevelTestPage() {
         phonics: { passed, level },
       }));
 
-      // 어느 경우든 리딩으로 진행 (1~2단계 막힘이면 최저 레벨부터, 문법은 생략)
+      // 어느 경우든 리딩으로 진행 (1~2단계 막힘이면 최저 레벨부터). 문법 생략 여부는 리딩·단어 결과 후 판단
       startAdaptive('reading', low);
     } else {
       setPhonicsIdx(phonicsIdx + 1);
@@ -244,11 +252,12 @@ export default function LevelTestPage() {
 
   const startAdaptive = async (subject, fromLowest = phonicsLow) => {
     setLoading(true);
-    await loadQuestions(subject);
+    const list = await loadQuestions(subject);
     setLoading(false);
+    if (!list || list.length === 0) { setBankError(SUBJECT_KO[subject] || subject); return; }
     const range = SUBJECT_RANGE[subject];
-    const start = fromLowest ? range.min : range.start; // 파닉스 1~2단계 막힘 → 가장 쉬운 것부터
-    setAdaptiveSession(createAdaptiveSession(range.min, range.max, start));
+    const start = fromLowest ? range.lowStart : range.start; // 파닉스 1~2단계 막힘 → 낮은 단계부터
+    setAdaptiveSession(createAdaptiveSession(range.min, range.max, start, range.step));
     setCurrentSubject(subject);
     setUsedIds((prev) => ({ ...prev, [subject]: [] }));
     setStage('adaptive');
@@ -260,8 +269,9 @@ export default function LevelTestPage() {
     let candidates;
 
     if (subject === 'reading') {
+      const target = READING_BINS[Math.max(0, Math.min(READING_BINS.length - 1, level))];
       candidates = [...list].sort(
-        (a, b) => Math.abs(Number(a['렉사일']) - level) - Math.abs(Number(b['렉사일']) - level)
+        (a, b) => Math.abs(Number(a['렉사일']) - target) - Math.abs(Number(b['렉사일']) - target)
       );
     } else if (subject === 'voca') {
       const target = VOCA_STAGES[Math.max(0, Math.min(17, level))];
@@ -318,7 +328,7 @@ export default function LevelTestPage() {
       [currentSubject]: [...(prev[currentSubject] || []), q['문제ID']],
     }));
 
-    const next = nextStep(adaptiveSession, correct, 8);
+    const next = nextStep(adaptiveSession, correct, MAX_Q);
     setAdaptiveSession(next);
 
     if (next.done) finishSubject(currentSubject, next.finalLevel);
@@ -328,14 +338,24 @@ export default function LevelTestPage() {
     const gaps = gapsCollected[subject] || [];
 
     if (subject === 'reading') {
-      setFinalResults((prev) => ({ ...prev, reading: { lexile: finalLevel, gaps } }));
+      const lexile = READING_BINS[Math.max(0, Math.min(READING_BINS.length - 1, finalLevel))];
+      setFinalResults((prev) => ({ ...prev, reading: { lexile, level: finalLevel, gaps } }));
       if (entryType === 'A') startAdaptive('voca');
       else setStage('phone');
     } else if (subject === 'voca') {
       const label = VOCA_STAGES[Math.max(0, Math.min(17, finalLevel))];
-      setFinalResults((prev) => ({ ...prev, voca: { stage: label, gaps } }));
-      if (entryType === 'A' && !phonicsLow) startAdaptive('grammar');
-      else setStage('phone'); // 파닉스 1~2단계 막힘 → 문법 생략
+      // 문법 생략 규칙 (2026-09-25): 파닉스 미통과만으로 생략하지 않는다.
+      // 리딩·단어가 둘 다 최저 단계일 때만 생략, 그 외엔 낮은 단계(2)부터 문법 진단.
+      const readingLowest = (finalResults.reading?.level ?? 0) <= SUBJECT_RANGE.reading.min;
+      const vocaLowest = finalLevel <= SUBJECT_RANGE.voca.min;
+      const skipGrammar = phonicsLow && readingLowest && vocaLowest;
+      setFinalResults((prev) => ({
+        ...prev,
+        voca: { stage: label, level: finalLevel, gaps },
+        ...(skipGrammar ? { grammarSkipped: true } : {}),
+      }));
+      if (entryType === 'A' && !skipGrammar) startAdaptive('grammar', phonicsLow);
+      else setStage('phone');
     } else if (subject === 'grammar') {
       setFinalResults((prev) => ({ ...prev, grammar: { stage: finalLevel, gaps } }));
       setStage('phone');
@@ -660,6 +680,19 @@ export default function LevelTestPage() {
             <div className="notice-title">잠시만 기다려주세요</div>
             보통 하루 안에 카카오톡으로 결과지를 받아보실 수 있어요.
           </div>
+        </div>
+      </main>
+    );
+  }
+
+  if (bankError) {
+    return (
+      <main className="container">
+        <div className="empty" style={{ lineHeight: 1.8 }}>
+          {bankError} 문제를 불러오지 못했어요.<br />
+          <span style={{ fontSize: 13, color: 'var(--light)' }}>
+            문제은행 시트의 {bankError} 탭이 비어 있거나 열 이름이 맞지 않아요. 선생님께 알려주세요.
+          </span>
         </div>
       </main>
     );

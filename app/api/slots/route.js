@@ -63,6 +63,7 @@ export async function GET() {
         수업시간: c['수업시간'] || '',
         반이름: c['반이름'] || '',
         시작일: c['시작일'] || '',
+        월수강료: String(c['월수강료'] || '').trim(), // 레테 결과 페이지 수강료 표시용 (2026-09-25)
         상태: status,
         대기인원: waiting,
         정원도달: waiting >= WAITLIST_THRESHOLD,

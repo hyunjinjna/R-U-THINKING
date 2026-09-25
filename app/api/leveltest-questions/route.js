@@ -1,4 +1,5 @@
 import { fetchSheet } from '../../../lib/sheets';
+import { normalizeQuestionRow } from '../../../lib/utils';
 import {
   SHEET_URLS,
   DEMO_PHONICS_Q,
@@ -40,9 +41,10 @@ export async function GET(request) {
   }
 
   const result = await fetchSheet(sheetUrl);
+  // 헤더 괄호 설명("게이트단계(1-5)" 등)이 붙어 있어도 코드 키로 읽히게 정규화
   return Response.json({
     demo: false,
-    questions: result.data || [],
+    questions: (result.data || []).map(normalizeQuestionRow),
     error: result.error,
   });
 }

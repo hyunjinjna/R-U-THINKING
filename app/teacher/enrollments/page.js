@@ -463,10 +463,33 @@ export default function EnrollmentsPage() {
 
         <div className="section-label">추가 정보</div>
         <div className="result-box" style={{ fontSize: 14, lineHeight: 2 }}>
-          집주소: {(Object.keys(selected).find((k) => k.includes('주소')) && selected[Object.keys(selected).find((k) => k.includes('주소'))]) || '-'}{'\n'}
-          영어 학습 경력: {selected['학생 영어 학습 경력'] || '-'}{'\n'}
-          알게 된 경로: {selected['알게 된 경로'] || '-'}{'\n'}
-          결제 방법: {selected['결제 방법'] || '-'}
+          {(() => {
+            // 시트 헤더 이름이 조금 달라도 찾기 (키워드 전부 포함, 제외어 없음)
+            const pick = (must, ban = []) => {
+              const k = Object.keys(selected).find((h) => must.every((m) => h.includes(m)) && !ban.some((b) => h.includes(b)));
+              return k ? String(selected[k] || '').trim() : '';
+            };
+            const areas = [
+              ['파닉스', pick(['파닉스'])],
+              ['리딩', pick(['리딩', '기간'])],
+              ['문법', pick(['문법', '기간'])],
+              ['단어', pick(['단어', '기간'])],
+              ['스피킹', pick(['스피킹', '기간'])],
+              ['라이팅', pick(['라이팅', '기간'])],
+            ].filter(([, v]) => v);
+            const prev = pick(['이전', '학습']);
+            const concerns = pick(['걱정']);
+            return (
+              <>
+                집주소: {pick(['주소']) || '-'}{'\n'}
+                학습 기간: {selected['학생 영어 학습 경력'] || pick(['경력']) || '-'}{prev ? ` (${prev})` : ''}{'\n'}
+                {areas.length > 0 && <>영역별: {areas.map(([a, v]) => `${a} ${v}`).join(' · ')}{'\n'}</>}
+                {concerns && <>걱정되는 점: {concerns}{'\n'}</>}
+                알게 된 경로: {selected['알게 된 경로'] || '-'}{'\n'}
+                결제 방법: {selected['결제 방법'] || '-'}
+              </>
+            );
+          })()}
         </div>
 
         {message && (

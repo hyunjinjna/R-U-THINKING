@@ -48,7 +48,7 @@ function RegisterContent() {
   }, []);
 
 
-  const [apply, setApply] = useState(null); // { kind: '등록'|'대기', items } — 자체 등록폼 (2026-09-24)
+  const [apply, setApply] = useState(null); // { enrollItems, waitItems } — 자체 등록폼 (2026-09-24, 통합 신청 2026-09-25)
 
   const inCart = (s) =>
     cart.some(
@@ -189,10 +189,11 @@ function RegisterContent() {
   if (apply) {
     return (
       <ApplyForm
-        kind={apply.kind}
-        items={apply.items}
+        enrollItems={apply.enrollItems}
+        waitItems={apply.waitItems}
         kakaoLink={process.env.NEXT_PUBLIC_KAKAO_CHANNEL_LINK || ''}
         onBack={() => setApply(null)}
+        onRestart={() => { setCart([]); setApply(null); setStep('category'); window.scrollTo(0, 0); }}
       />
     );
   }
@@ -277,12 +278,6 @@ function RegisterContent() {
                 </div>
               ))}
             </div>
-            {conflicts.length === 0 && (
-              <button className="btn" style={{ marginTop: 12 }}
-                onClick={() => setApply({ kind: '등록', items: toItems(openItems) })}>
-                {openItems.length}개 수업 등록하기
-              </button>
-            )}
           </>
         )}
 
@@ -311,13 +306,19 @@ function RegisterContent() {
                 </div>
               ))}
             </div>
-            {conflicts.length === 0 && (
-              <button className="btn btn-outline" style={{ marginTop: 12 }}
-                onClick={() => setApply({ kind: '대기', items: toItems(waitItems) })}>
-                {waitItems.length}개 수업 대기 신청하기
-              </button>
-            )}
           </>
+        )}
+
+        {/* 통합 신청 버튼 (2026-09-25): 등록·대기가 섞여 있어도 폼 한 번 — 시트엔 종류별로 나눠 기록 */}
+        {cart.length > 0 && conflicts.length === 0 && (
+          <button className="btn" style={{ marginTop: 16 }}
+            onClick={() => setApply({ enrollItems: toItems(openItems), waitItems: toItems(waitItems) })}>
+            {openItems.length > 0 && waitItems.length > 0
+              ? `신청하기 (등록 ${openItems.length} · 대기 ${waitItems.length})`
+              : openItems.length > 0
+                ? `${openItems.length}개 수업 등록하기`
+                : `${waitItems.length}개 수업 대기 신청하기`}
+          </button>
         )}
 
         {cart.length > 0 && conflicts.length === 0 && (

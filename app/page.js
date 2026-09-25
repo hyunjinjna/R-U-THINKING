@@ -8,6 +8,7 @@ import {
   hasClassToday, isCancelledToday, getKoreaNow,
 } from '../lib/week';
 import { classStartAt } from '../lib/dashboard';
+import { formatSchedule } from '../lib/utils';
 
 const CATEGORY_STYLE = {
   파닉스: { color: 'var(--red)', emoji: '🔤' },
@@ -1313,7 +1314,7 @@ function ClassSection({ cls, onOpenConcept, onOpenCode, onOpenReading, isOverdue
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <span style={{ fontWeight: 800, color: 'var(--navy)', fontSize: 18 }}>{cls['반이름']}</span>
         <span style={{ fontSize: 12.5, color: 'var(--light)' }}>
-          {cls['대분류'] || '수업'}{cls['진도'] ? ` · ${cls['진도']}` : ''}
+          {[formatSchedule(cls['수업요일'], cls['수업시간']), cls['대분류'] || '수업', cls['진도']].filter(Boolean).join(' · ')}
         </span>
       </div>
 
