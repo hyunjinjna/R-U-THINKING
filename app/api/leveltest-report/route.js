@@ -50,7 +50,7 @@ function summarizeGrammarStage(stage) {
 }
 
 export async function POST(request) {
-  const { phone, results } = await request.json();
+  const { phone, name, results } = await request.json();
 
   if (!isValidPhone(phone)) {
     return Response.json({ error: '전화번호를 정확히 입력해주세요. (010으로 시작하는 11자리)' });
@@ -67,13 +67,16 @@ export async function POST(request) {
 
   const sections = [];
 
-  // 파닉스: 게이트 통과하면 섹션에서 완전히 제외
+  // 파닉스: 5단계 전부 통과한 아이만 섹션 제외, 그 외엔 시작 권수 추천 (2026-09-24 판별형)
   if (results.phonics && !results.phonics.passed) {
+    const book = Math.max(1, Math.min(5, Number(results.phonics.level) || 1));
     sections.push({
       영역: '파닉스',
       구멍: [],
-      추천반: '파닉스 기초반부터 시작',
-      비고: '파닉스 기초가 먼저 필요해서 다른 영역 진단은 진행하지 않았습니다.',
+      추천반: `EFL Phonics ${book}권부터 시작`,
+      비고: book <= 2
+        ? '파닉스 기초를 먼저 다지는 게 우선이라, 리딩·단어는 가장 쉬운 단계부터 진단했고 문법 진단은 생략했습니다.'
+        : (book >= 2 ? `${book - 1}권까지의 소리 규칙은 잡혀 있고, ${book}권 규칙부터 연습이 필요합니다.` : ''),
     });
   }
 
@@ -129,7 +132,7 @@ export async function POST(request) {
         messages: [
           {
             role: 'user',
-            content: `학생의 레벨테스트 결과:\n\n${dataText}\n\n위 데이터를 바탕으로 JSON을 작성해줘.`,
+            content: `학생 이름: ${String(name || '').trim() || '(미입력)'}\n학생의 레벨테스트 결과:\n\n${dataText}\n\n위 데이터를 바탕으로 JSON을 작성해줘. 이름이 있으면 총평·코멘트에서 "OO 학생"으로 자연스럽게 불러줘 (매 문장 반복 금지, 처음 한두 번만).`,
           },
         ],
       }),
@@ -206,6 +209,7 @@ export async function POST(request) {
     grammarSec ? grammarSec.구멍.join(', ') : '',
     '',
     fullText,
+    String(name || '').trim(), // 12번째 열: 이름 (2026-09-24 추가)
   ];
 
   const sheetId = extractSheetId(process.env.NEXT_PUBLIC_LEVELTEST_SHEET_LINK);

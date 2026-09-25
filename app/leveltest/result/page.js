@@ -72,9 +72,15 @@ function ResultContent() {
   return (
     <main className="container">
       <div className="logo-row">
-        <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
+        <img src="/logo.png" alt="알유띵킹 어학원" className="site-logo" />
         <span className="badge">레벨테스트 결과</span>
       </div>
+
+      {String(data['이름'] || '').trim() && (
+        <h1 className="page-title" style={{ marginTop: 14, fontSize: 22 }}>
+          {String(data['이름']).trim()} 학생의 진단 결과
+        </h1>
+      )}
 
       {/* 총평 */}
       {summary && (

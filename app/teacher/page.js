@@ -1,5 +1,7 @@
 'use client';
 
+import LogoLockup from '../components/LogoLockup';
+
 import Link from 'next/link';
 
 const MENU = {
@@ -28,10 +30,7 @@ const MENU = {
 export default function TeacherPage() {
   return (
     <main className="container">
-      <div className="logo-row">
-        <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
-        <span className="badge">R U Thinking?</span>
-      </div>
+      <div className="logo-row"><LogoLockup withSub /></div>
       <h1 className="page-title">선생님 페이지</h1>
 
       {Object.entries(MENU).map(([key, group]) => (

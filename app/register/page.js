@@ -1,5 +1,8 @@
 'use client';
 
+import LogoLockup from '../components/LogoLockup';
+import ApplyForm from '../components/ApplyForm';
+
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { findTimeConflicts } from '../../lib/adaptive';
@@ -45,7 +48,7 @@ function RegisterContent() {
   }, []);
 
 
-  const enrollForm = process.env.NEXT_PUBLIC_ENROLL_FORM_LINK || '';
+  const [apply, setApply] = useState(null); // { kind: '등록'|'대기', items } — 자체 등록폼 (2026-09-24)
 
   const inCart = (s) =>
     cart.some(
@@ -103,7 +106,7 @@ function RegisterContent() {
     return (
       <main className="container">
         <div className="logo-row">
-          <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
+          <LogoLockup />
           <span className="badge">추천 수업</span>
         </div>
         <h1 className="page-title">추천받으신 수업</h1>
@@ -182,50 +185,30 @@ function RegisterContent() {
     );
   }
 
+  // ===== 자체 등록폼 (구글폼 대체, 2026-09-24) =====
+  if (apply) {
+    return (
+      <ApplyForm
+        kind={apply.kind}
+        items={apply.items}
+        kakaoLink={process.env.NEXT_PUBLIC_KAKAO_CHANNEL_LINK || ''}
+        onBack={() => setApply(null)}
+      />
+    );
+  }
+
   // ===== 장바구니 화면 =====
   if (step === 'cart') {
     const openItems = cart.filter((c) => c['상태'] === '등록가능');
     const waitItems = cart.filter((c) => c['상태'] !== '등록가능');
 
-    // ===== 구글폼 사전 채우기 =====
-    // 등록폼: 과목 / 레벨 / (요일+시간 합쳐서) 각각 별도 필드
-    const ENROLL_FIELDS = {
-      종류: 'entry.716998210', // 신청 종류 (등록/대기) — 2026-09-19 폼에 추가됨
-      과목: 'entry.264728761',
-      레벨: 'entry.893298491',
-      요일시간: 'entry.111945916',
-    };
-
-    const buildUrl = (baseUrl, params) => {
-      if (!baseUrl) return null;
-      const sep = baseUrl.includes('?') ? '&' : '?';
-      const query = Object.entries(params)
-        .filter(([, v]) => v)
-        .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-        .join('&');
-      return `${baseUrl}${sep}usp=pp_url&${query}`;
-    };
-
-    const makeEnrollLink = (items) =>
-      buildUrl(enrollForm, {
-        [ENROLL_FIELDS.종류]: '등록',
-        [ENROLL_FIELDS.과목]: items.map((i) => i['대분류'] || '').join(', '),
-        [ENROLL_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join(', '),
-        [ENROLL_FIELDS.요일시간]: items
-          .map((i) => `${i['수업요일'] || ''} ${i['수업시간'] || ''}`.trim())
-          .join(', '),
-      });
-
-    // 대기 신청도 같은 등록 폼으로 — 신청 종류만 "대기"로 미리 채움
-    const makeWaitlistLink = (items) =>
-      buildUrl(enrollForm, {
-        [ENROLL_FIELDS.종류]: '대기',
-        [ENROLL_FIELDS.과목]: items.map((i) => i['대분류'] || '').join(', '),
-        [ENROLL_FIELDS.레벨]: items.map((i) => i['레벨'] || '').join(', '),
-        [ENROLL_FIELDS.요일시간]: items
-          .map((i) => `${i['수업요일'] || ''} ${i['수업시간'] || ''}`.trim())
-          .join(', '),
-      });
+    // 자체 등록폼으로 넘길 수업 정보
+    const toItems = (list) =>
+      list.map((c) => ({
+        과목: c['대분류'] || '',
+        레벨: c['레벨'] || '',
+        요일시간: `${c['수업요일'] || ''} ${c['수업시간'] || ''}`.trim(),
+      }));
 
     return (
       <main className="container">
@@ -294,12 +277,11 @@ function RegisterContent() {
                 </div>
               ))}
             </div>
-            {conflicts.length === 0 && enrollForm && (
-              <a href={makeEnrollLink(openItems)} target="_blank" rel="noopener noreferrer">
-                <button className="btn" style={{ marginTop: 12 }}>
-                  {openItems.length}개 수업 등록하기
-                </button>
-              </a>
+            {conflicts.length === 0 && (
+              <button className="btn" style={{ marginTop: 12 }}
+                onClick={() => setApply({ kind: '등록', items: toItems(openItems) })}>
+                {openItems.length}개 수업 등록하기
+              </button>
             )}
           </>
         )}
@@ -329,19 +311,18 @@ function RegisterContent() {
                 </div>
               ))}
             </div>
-            {conflicts.length === 0 && enrollForm && (
-              <a href={makeWaitlistLink(waitItems)} target="_blank" rel="noopener noreferrer">
-                <button className="btn btn-outline" style={{ marginTop: 12 }}>
-                  {waitItems.length}개 수업 대기 신청하기
-                </button>
-              </a>
+            {conflicts.length === 0 && (
+              <button className="btn btn-outline" style={{ marginTop: 12 }}
+                onClick={() => setApply({ kind: '대기', items: toItems(waitItems) })}>
+                {waitItems.length}개 수업 대기 신청하기
+              </button>
             )}
           </>
         )}
 
         {cart.length > 0 && conflicts.length === 0 && (
           <div className="notice" style={{ marginTop: 20 }}>
-            신청서에 선택하신 수업 정보가 미리 입력되어 있어요. 이름과 연락처만 적어주시면 됩니다.
+            선택하신 수업 정보는 자동으로 담겨요. 이름과 연락처 정도만 적으시면 1분 안에 끝납니다.
           </div>
         )}
       </main>
@@ -489,10 +470,7 @@ function RegisterContent() {
   // ===== 1단계: 대분류 =====
   return (
     <main className="container">
-      <div className="logo-row">
-        <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
-        <span className="badge">R U Thinking?</span>
-      </div>
+      <div className="logo-row"><LogoLockup withSub /></div>
       <h1 className="page-title">수업 등록 안내</h1>
       <p className="page-sub">어떤 과목을 등록하시나요?</p>
 

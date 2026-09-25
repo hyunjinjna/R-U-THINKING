@@ -1,5 +1,7 @@
 'use client';
 
+import LogoLockup from './components/LogoLockup';
+
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   daysSinceLastClass, filterHomeworkByDay, lastClassDate,
@@ -276,10 +278,7 @@ export default function StudentPage() {
   if (step === 'onboarding') {
     return (
       <main className="container">
-        <div className="logo-row">
-          <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
-          <span className="badge">R U Thinking?</span>
-        </div>
+        <div className="logo-row"><LogoLockup withSub /></div>
         <h1 className="page-title">처음 왔구나! 👋</h1>
         <p className="page-sub">이름이랑 학부모님 전화번호를 알려줘. 다음부터는 자동으로 열려!</p>
 
@@ -674,10 +673,7 @@ export default function StudentPage() {
           ← 홈으로
         </button>
       )}
-      <div className="logo-row">
-        <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
-        <span className="badge">R U Thinking?</span>
-      </div>
+      <div className="logo-row"><LogoLockup withSub /></div>
       <h1 className="page-title">우리 반 찾기</h1>
       <p className="page-sub">어떤 수업을 듣고 있나요?</p>
 
@@ -991,7 +987,7 @@ function HomeworkLine({ item, checkKey, onReadingQuiz, tone = 'blue', last = fal
       <span style={{ fontSize: 18, flex: 'none', lineHeight: 1 }}>{emoji}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{
-          fontSize: 15.5, color: checked ? 'var(--light)' : 'var(--navy)', fontWeight: 600,
+          fontSize: 15.5, color: checked ? 'var(--light)' : '#2B2B33', fontWeight: 500,
           textDecoration: checked ? 'line-through' : 'none', wordBreak: 'keep-all',
         }}>
           {mainText}
@@ -1056,10 +1052,7 @@ function HomeScreen({
 
   return (
     <main className="container">
-      <div className="logo-row">
-        <img src="/logo.png" alt="R U Thinking?" className="site-logo" />
-        <span className="badge">R U Thinking?</span>
-      </div>
+      <div className="logo-row"><LogoLockup withSub /></div>
       <h1 className="page-title">안녕, {profile.이름}! 👋</h1>
       <p className="page-sub">오늘도 화이팅!</p>
 

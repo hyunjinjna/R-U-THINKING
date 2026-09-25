@@ -58,13 +58,14 @@ export default function TeacherLevelTestPage() {
   // 상세 보기
   if (selected) {
     const phone = selected['전화번호'] || '';
+    const studentName = String(selected['이름'] || '').trim();
     const full = String(selected['리포트전문'] || '');
     const summary = full.split('\n\n')[0] || '';
 
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
     const link = `${origin}/leveltest/result?phone=${encodeURIComponent(phone)}`;
 
-    const kakaoText = `알유띵킹 레벨테스트 결과: ${summary}
+    const kakaoText = `${studentName ? `${studentName} 학생의 ` : ''}알유띵킹 레벨테스트 결과: ${summary}
 
 자세한 진단 결과는 아래 링크에서 확인하세요.
 ${link}`;
@@ -73,7 +74,7 @@ ${link}`;
       <main className="container">
         <button className="back-link" onClick={() => setSelected(null)}>← 목록으로</button>
 
-        <h1 className="page-title">{phone}</h1>
+        <h1 className="page-title">{studentName ? `${studentName} (${phone})` : phone}</h1>
         <p className="page-sub">{selected['제출일시']}</p>
 
         <div className="section-label">카톡으로 보낼 내용</div>
@@ -151,7 +152,7 @@ ${link}`;
             <button key={i} className="card" onClick={() => setSelected(r)}>
               <div className="card-icon" style={{ background: 'var(--teal)', fontSize: 18 }}>📋</div>
               <div>
-                <div className="card-title">{r['전화번호']}</div>
+                <div className="card-title">{String(r['이름'] || '').trim() ? `${String(r['이름']).trim()} (${r['전화번호']})` : r['전화번호']}</div>
                 <div className="card-desc">{r['제출일시']}</div>
               </div>
               <div className="card-arrow">→</div>

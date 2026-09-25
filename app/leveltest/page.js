@@ -1,12 +1,13 @@
 'use client';
 
+import LogoLockup from '../components/LogoLockup';
+
 import { useState, useEffect, useRef } from 'react';
 import {
   createAdaptiveSession,
   nextStep,
-  evaluatePhonicsGate,
-  estimatePhonicsBook,
   isValidPhone,
+  evaluatePhonicsPlacement,
 } from '../../lib/adaptive';
 
 const VOCA_STAGES = [
@@ -57,7 +58,7 @@ function speakText(text) {
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'en-US';
-    u.rate = 0.8;
+    u.rate = 0.65; // 파닉스 듣기 속도 하향 (2026-09-24)
     window.speechSynthesis.speak(u);
   } catch (e) {}
 }
@@ -114,11 +115,6 @@ export default function LevelTestPage() {
   const [stage, setStage] = useState('intro');
 
   // 레벨테스트 전용 크림 배경
-  useEffect(() => {
-    const prev = document.body.style.background;
-    document.body.style.background = '#FBF9F3';
-    return () => { document.body.style.background = prev; };
-  }, []);
   const [entryType, setEntryType] = useState(null);
   const [bookCategory, setBookCategory] = useState(null);
 
@@ -128,6 +124,8 @@ export default function LevelTestPage() {
 
   const [phonicsAnswers, setPhonicsAnswers] = useState([]);
   const [phonicsIdx, setPhonicsIdx] = useState(0);
+  const [phonicsPlan, setPhonicsPlan] = useState([]); // 판별형: 1~5단계 × 2문제 출제 순서
+  const [phonicsLow, setPhonicsLow] = useState(false); // 1~2단계에서 막힘 → 리딩·단어 최저 시작 + 문법 생략
 
   const [adaptiveSession, setAdaptiveSession] = useState(null);
   const [currentSubject, setCurrentSubject] = useState(null);
@@ -136,6 +134,7 @@ export default function LevelTestPage() {
   const [finalResults, setFinalResults] = useState({});
 
   const [phone, setPhone] = useState('');
+  const [studentName, setStudentName] = useState('');
   const [phoneError, setPhoneError] = useState('');
   const [timer, setTimer] = useState(60);
   const timerRef = useRef(null);
@@ -167,8 +166,16 @@ export default function LevelTestPage() {
   const startComprehensive = async () => {
     setEntryType('A');
     setLoading(true);
-    await loadQuestions('phonics');
+    const list = await loadQuestions('phonics');
     setLoading(false);
+    // 판별형: 1~5단계 각 2문제 (그 단계 문항 중 랜덤, 부족하면 있는 만큼)
+    const plan = [];
+    for (let s = 1; s <= 5; s++) {
+      const pool = (list || []).filter((q) => Number(q['게이트단계'] || 0) === s);
+      const shuffled = [...pool].sort(() => Math.random() - 0.5);
+      plan.push(...shuffled.slice(0, 2));
+    }
+    setPhonicsPlan(plan);
     setAfterGuide('phonics');
     setStage('guide');
   };
@@ -209,41 +216,39 @@ export default function LevelTestPage() {
     setStage('adaptive');
   };
 
-  // ===== 파닉스 게이트 =====
+  // ===== 파닉스 전 단계 판별 (2026-09-24 개편: 게이트 폐기) =====
+  // 1~5단계 각 2문제, 틀려도 끝까지. 시작 권 = 처음으로 그 단계 만점을 못 받은 단계.
   const answerPhonics = (correct) => {
-    const list = questions.phonics || [];
-    const q = list[phonicsIdx];
+    const q = phonicsPlan[phonicsIdx];
     const newAnswers = [
       ...phonicsAnswers,
       { stage: Number(q?.['게이트단계'] || 1), correct },
     ];
     setPhonicsAnswers(newAnswers);
 
-    if (phonicsIdx + 1 >= Math.min(5, list.length)) {
-      const gate = evaluatePhonicsGate(newAnswers.map((a) => a.correct));
-      const book = estimatePhonicsBook(newAnswers);
+    if (phonicsIdx + 1 >= phonicsPlan.length) {
+      const { passed, level, low } = evaluatePhonicsPlacement(newAnswers);
 
+      setPhonicsLow(low);
       setFinalResults((prev) => ({
         ...prev,
-        phonics: { passed: gate.passed, level: book },
+        phonics: { passed, level },
       }));
 
-      if (!gate.passed) {
-        setStage('phone');
-      } else {
-        startAdaptive('reading');
-      }
+      // 어느 경우든 리딩으로 진행 (1~2단계 막힘이면 최저 레벨부터, 문법은 생략)
+      startAdaptive('reading', low);
     } else {
       setPhonicsIdx(phonicsIdx + 1);
     }
   };
 
-  const startAdaptive = async (subject) => {
+  const startAdaptive = async (subject, fromLowest = phonicsLow) => {
     setLoading(true);
     await loadQuestions(subject);
     setLoading(false);
     const range = SUBJECT_RANGE[subject];
-    setAdaptiveSession(createAdaptiveSession(range.min, range.max, range.start));
+    const start = fromLowest ? range.min : range.start; // 파닉스 1~2단계 막힘 → 가장 쉬운 것부터
+    setAdaptiveSession(createAdaptiveSession(range.min, range.max, start));
     setCurrentSubject(subject);
     setUsedIds((prev) => ({ ...prev, [subject]: [] }));
     setStage('adaptive');
@@ -279,7 +284,7 @@ export default function LevelTestPage() {
   };
 
   const currentQuestion = (() => {
-    if (stage === 'phonics') return (questions.phonics || [])[phonicsIdx] || null;
+    if (stage === 'phonics') return phonicsPlan[phonicsIdx] || null;
     if (stage === 'adaptive' && adaptiveSession) {
       return getQuestionForLevel(currentSubject, adaptiveSession.current);
     }
@@ -329,8 +334,8 @@ export default function LevelTestPage() {
     } else if (subject === 'voca') {
       const label = VOCA_STAGES[Math.max(0, Math.min(17, finalLevel))];
       setFinalResults((prev) => ({ ...prev, voca: { stage: label, gaps } }));
-      if (entryType === 'A') startAdaptive('grammar');
-      else setStage('phone');
+      if (entryType === 'A' && !phonicsLow) startAdaptive('grammar');
+      else setStage('phone'); // 파닉스 1~2단계 막힘 → 문법 생략
     } else if (subject === 'grammar') {
       setFinalResults((prev) => ({ ...prev, grammar: { stage: finalLevel, gaps } }));
       setStage('phone');
@@ -340,6 +345,10 @@ export default function LevelTestPage() {
   const submitPhone = async () => {
     setPhoneError('');
 
+    if (!String(studentName).trim()) {
+      setPhoneError('학생 이름을 입력해주세요.');
+      return;
+    }
     if (!isValidPhone(phone)) {
       setPhoneError('전화번호를 정확히 입력해주세요. (010으로 시작하는 11자리)');
       return;
@@ -352,7 +361,7 @@ export default function LevelTestPage() {
       const res = await fetch('/api/leveltest-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, results: finalResults }),
+        body: JSON.stringify({ phone, name: String(studentName).trim(), results: finalResults }),
       });
       const json = await res.json();
       if (json.error) {
@@ -393,7 +402,7 @@ export default function LevelTestPage() {
             <span style={{ width: 32, height: 32, background: 'var(--yellow)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, color: 'var(--navy)', flex: 'none' }}>A</span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 16, fontWeight: 800, color: '#fff' }}>종합 레벨테스트</span>
-              <span style={{ display: 'block', fontSize: 12, color: '#AFA9EC', marginTop: 2, lineHeight: 1.5 }}>우리 아이 영어 실력을 전체적으로<br />확인하고 싶어요</span>
+              <span style={{ display: 'block', fontSize: 12, color: '#AFA9EC', marginTop: 2, lineHeight: 1.5 }}>아이 영어 실력을 전체적으로 확인하고 싶어요</span>
             </span>
             <span style={{ marginLeft: 'auto', color: 'var(--yellow)', fontSize: 17, flex: 'none' }}>→</span>
           </button>
@@ -440,7 +449,7 @@ export default function LevelTestPage() {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 11 }}>
             <span style={{ background: '#FBF9F3', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>미국 유학 10년</span>
             <span style={{ background: '#FBF9F3', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>대치동 1:1 지도 200명+</span>
-            <span style={{ background: '#FBF9F3', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>김과외 상위 0.02%</span>
+            <span style={{ background: '#FBF9F3', border: '1px solid var(--border)', color: 'var(--navy)', fontSize: 11.5, fontWeight: 700, padding: '4px 10px', borderRadius: 999 }}>김과외 상위 0.02% 선생님</span>
           </div>
         </div>
       </main>
@@ -590,11 +599,26 @@ export default function LevelTestPage() {
           <div style={{ fontSize: 48, marginBottom: 18 }}>✅</div>
           <h1 className="page-title">시험이 끝났어요!</h1>
           <p className="page-sub" style={{ fontSize: 15 }}>
-            결과 리포트를 보내드릴 전화번호를 입력해주세요
+            결과 리포트를 보내드릴 정보를 입력해주세요
           </p>
         </div>
 
         <div className="field">
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>학생 이름</label>
+          <input
+            type="text"
+            value={studentName}
+            onChange={(e) => {
+              setStudentName(e.target.value);
+              if (phoneError) setPhoneError('');
+            }}
+            placeholder="예: 김하늘"
+            style={{ fontSize: 17, padding: '14px 12px' }}
+          />
+        </div>
+
+        <div className="field">
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: 'var(--navy)', marginBottom: 6 }}>학부모 전화번호</label>
           <input
             type="tel"
             value={phone}
@@ -652,20 +676,6 @@ export default function LevelTestPage() {
 // ===== 레벨테스트 리뉴얼 공용 컴포넌트 (2026-09-24) =====
 
 // 로고 락업 — 로고와 학원 이름은 왼쪽 정렬로 붙임. 두 줄 양끝은 자간으로 맞춤 (튀어나오는 줄 없게)
-function LogoLockup({ withSub = false }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 9, justifyContent: 'flex-start' }}>
-      <img src="/logo.png" alt="알유띵킹 어학원" style={{ width: withSub ? 46 : 36, height: withSub ? 46 : 36, flex: 'none' }} />
-      <span style={{ display: 'inline-block' }}>
-        <span style={{ display: 'block', fontSize: withSub ? 17.5 : 15, fontWeight: 800, color: 'var(--navy)', letterSpacing: withSub ? '0.115em' : 0, marginRight: withSub ? '-0.115em' : 0, lineHeight: 1.25, whiteSpace: 'nowrap' }}>알유띵킹 어학원</span>
-        {withSub && (
-          <span style={{ display: 'block', fontSize: 13, color: 'var(--light)', marginTop: 2, lineHeight: 1.2, whiteSpace: 'nowrap' }}>관리형 온라인 영어학원</span>
-        )}
-      </span>
-    </div>
-  );
-}
-
 // 문제 화면 상단: 락업 + 타이머 링
 function QuizTopBar({ timer }) {
   return (
